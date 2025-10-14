@@ -1,7 +1,7 @@
 
 # Sparrow-X
 
-A distributed systems playground where the main feature is GraphRAG, using graph-structured data from a realistic social network to power LLM queries, insights, and experiments. While the twitter clone is just the substrate inspired by Grok, whose access to over a quarter-billion active user interactions transforms X into a second-generation, directory-like network of human knowledge, Sparrowx distills that idea into an accessible MVP: a place where juniors and product/engineering managers alike can explore how graph-aware AI unlocks new ways of navigating and reasoning over connected data, instrument, measure and act on the intelligence hidden inside AI-driven workflows through observability tools.
+A distributed systems playground where the main feature is GraphRAG, using graph-structured data from a realistic social network to power LLM queries, insights, and experiments. While the twitter clone is just the substrate inspired by Grok, whose access to over a quarter-billion active user interactions transforms X into a second-generation, directory-like network of human knowledge, Sparrowx distills that idea into an accessible MVP for junior devs( Through Bottom-Up Understanding) and Senior Engineers coming from other languages (Through Top-Down ).
 
 ## Goals Of This Project
 - 🔹 Using Vertical Slice Architecture for architecture level.
