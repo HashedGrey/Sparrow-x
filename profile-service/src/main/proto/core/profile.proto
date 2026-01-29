@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package profile;
+
+option java_multiple_files = true;
+option java_package = "com.example.profile.grpc";
+option java_outer_classname = "ProfileProto";
+
+service ProfileService {
+  rpc CreateProfile (CreateProfileRequest) returns (CreateProfileResponse);
+  rpc EditProfile (EditProfileRequest) returns (ProfileResponse);
+  rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
+  rpc DeleteProfile (DeleteProfileRequest) returns (DeleteProfileResponse);
+}
+
+message CreateProfileRequest {
+  string userId = 1;
+  string username = 2;
+  string bio = 3;
+  string avatarUrl = 4;
+}
+
+message CreateProfileResponse {
+  string id = 1;
+  string username = 2;
+  string bio = 3;
+  string avatarUrl = 4;
+  string createdAt = 5;
+}
+message GetProfileRequest {
+  string id = 1;
+}
+
+message GetProfileResponse {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string bio = 4;
+  string avatarUrl = 5;
+}
+
+
+

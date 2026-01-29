@@ -5,6 +5,8 @@ import com.sparrowx.profile.valueobjects.FollowId;
 import com.sparrowx.profile.valueobjects.ProfileId;
 import com.sparrowx.profile.features.createfollow.FollowCreatedDomainEvent;
 import lombok.*;
+
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @AllArgsConstructor
@@ -12,7 +14,7 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(callSuper = true)
 @Getter
 @Setter(AccessLevel.PRIVATE)
-public class Follow extends AggregateRoot<FollowId> {
+public class Follow extends AggregateRoot {
 
     ProfileId followerId;
     ProfileId followeeId;
@@ -22,9 +24,9 @@ public class Follow extends AggregateRoot<FollowId> {
                   ProfileId followerId,
                   ProfileId followeeId,
                   LocalDateTime followedAt,
-                  LocalDateTime createdAt,
+                  Instant createdAt,
                   Long createdBy,
-                  LocalDateTime lastModified,
+                  Instant lastModified,
                   Long lastModifiedBy,
                   Long version,
                   boolean isDeleted) {

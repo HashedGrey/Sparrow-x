@@ -1,6 +1,5 @@
 package com.sparrowx.profile.features.profile.createprofile;
 
-
 import buildingblocks.mediator.abstractions.commands.ICommandHandler;
 import buildingblocks.mediator.abstractions.requests.Unit;
 import com.sparrowx.profile.data.cassandra.tables.ProfileTable;
@@ -21,9 +20,7 @@ public class CreateProfileCassandraCommandHandler implements ICommandHandler<Cre
     public Unit handle(CreateProfileCassandraCommand command) {
         ProfileTable profileRow = ProfileMapper.toProfileTable(command);
 
-        // Cassandra save = upsert (overwrite if key exists)
         profileCassandraRepository.save(profileRow);
-
         return Unit.VALUE;
     }
 }

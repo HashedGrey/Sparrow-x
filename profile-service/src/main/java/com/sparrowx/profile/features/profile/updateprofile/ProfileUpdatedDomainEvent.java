@@ -9,7 +9,6 @@ public record ProfileUpdatedDomainEvent(
         String name,
         String bio,
         String avatarUrl,
-        ProfileStatus status,
         boolean isDeleted
 ) implements DomainEvent {
 }

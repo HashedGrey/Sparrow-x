@@ -16,7 +16,7 @@ public class Email {
 
     public Email(String value) {
         ValidationUtils.notBeNullOrEmpty(value);
-        ValidationUtils.notBeInvalidEmail(value, "Email");
+        ValidationUtils.notBeInvalidEmail(value.toString(), "Email");
 
         this.email = value;
     }

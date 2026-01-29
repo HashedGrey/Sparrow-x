@@ -24,9 +24,5 @@ public class ProfileUpdatedListener implements MessageHandler<ProfileUpdated> {
                 new KeyValuePair("profile_updated_event", JsonConverterUtils.serializeObject(event))
         );
 
-        // 🔹 Here’s where you can:
-        // - update caches
-        // - trigger search index sync (Neo4j/Elasticsearch)
-        // - fire off notifications
     }
 }

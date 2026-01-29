@@ -1,88 +1,60 @@
 package com.sparrowx.profile.models;
 
-
 import buildingblocks.core.model.AggregateRoot;
 import com.sparrowx.profile.valueobjects.*;
 import com.sparrowx.profile.features.profile.createprofile.ProfileCreatedDomainEvent;
 import lombok.*;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @Getter
 @Setter(AccessLevel.PRIVATE)
-public class Profile extends AggregateRoot<ProfileId> {
-
+public class Profile extends AggregateRoot {
     UserName userName;
     FullName fullName;
-    Password password;
     Email email;
+    ProfileId profileId;
+    static Instant createdAt;
     AvatarUrl avatarUrl;
-    LocalDate joinDate;
 
-    public Profile(ProfileId id,
-                   UserName userName,
-                   Email email,
-                   AvatarUrl avatarUrl,
-                   LocalDate joinDate,
-                   LocalDateTime createdAt,
-                   Long createdBy,
-                   LocalDateTime lastModified,
-                   Long lastModifiedBy,
-                   Long version,
-                   boolean isDeleted) {
-        this.id = id;
-        this.userName = userName;
-        this.email = email;
-        this.avatarUrl = avatarUrl;
-        this.joinDate = joinDate;
-        this.createdAt = createdAt;
-        this.createdBy = createdBy;
-        this.lastModified = lastModified;
-        this.lastModifiedBy = lastModifiedBy;
-        this.version = version;
-        this.isDeleted = isDeleted;
-    }
-
-    public Profile(ProfileId id,
-                   UserName userName,
-                   FullName fullName,
-                   Email email,
-                   Password password,
-                   AvatarUrl avatarUrl) {
-        this.id = id;
+    public Profile(ProfileId profileId, UserName userName,
+                   FullName fullName, Email email,
+                   AvatarUrl avatarUrl, Instant createdAt) {
+        this.profileId = profileId;
         this.userName = userName;
         this.fullName = fullName;
         this.email = email;
-        this.password = password;
         this.avatarUrl = avatarUrl;
+        this.createdAt = createdAt;
     }
 
-    public static Profile create(ProfileId id,
-                                 UserName userName,
+    public static Profile create(UserName userName,
                                  FullName fullName,
                                  Email email,
-                                 Password password,
-                                 AvatarUrl avatarUrl
-                                 ) {
-        var profile = new Profile(id, userName, fullName, email, password, avatarUrl);
+                                 AvatarUrl avatarUrl,
+                                 Instant createdAt) {
+        ProfileId profileId = ProfileId.newId();
+
+        var profile = new Profile(profileId, userName, fullName, email, avatarUrl, createdAt);
 
         profile.addDomainEvent(new ProfileCreatedDomainEvent(
-                profile.id.getValue(),
-                profile.userName.getUserName(),
-                profile.fullName.getFullName(),
-                profile.email.getEmail()
+                profileId,
+                userName,
+                fullName,
+                email,
+                avatarUrl,
+                createdAt
         ));
 
         return profile;
     }
 
-    public void update(UserId userId, UserName userName, AvatarUrl avatarUrl, boolean isDeleted) {
-        this.userId = userId;
+
+
+    public void update( UserName userName, AvatarUrl avatarUrl, boolean isDeleted) {
         this.userName = userName;
-        this.avatarUrl = avatarUrl;
         this.isDeleted = isDeleted;
     }
 

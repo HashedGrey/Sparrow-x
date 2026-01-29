@@ -1,6 +1,5 @@
 package com.sparrowx.profile.features.profile.updateprofile;
 
-import com.sparrowx.profile.enums.ProfileStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.Errors;
 import org.springframework.validation.Validator;
@@ -34,11 +33,4 @@ public class UpdateProfileCommandValidator implements Validator {
 
     }
 
-    private boolean isValidStatus(ProfileStatus status) {
-        return EnumSet.of(
-                ProfileStatus.Active,
-                ProfileStatus.Suspended,
-                ProfileStatus.Deleted
-        ).contains(status);
-    }
 }

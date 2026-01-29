@@ -11,6 +11,12 @@ spring:
     problemdetails:
       enabled: true
 
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health
+
   datasource:
     url: jdbc:postgresql://localhost:5432/user_write
     username: postgres

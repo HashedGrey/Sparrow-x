@@ -9,14 +9,13 @@ import lombok.NoArgsConstructor;
 
 @Embeddable
 @EqualsAndHashCode
-@NoArgsConstructor // Required by JPA
+@NoArgsConstructor
 @Getter
 public class UserName {
     private String userName;
 
     public UserName(String value) {
         ValidationUtils.notBeNullOrEmpty(value);
-
         this.userName = value;
     }
 }

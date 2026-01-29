@@ -1,7 +1,9 @@
 package com.sparrowx.profile.data.postgres.entities;
 
 import buildingblocks.core.model.BaseEntity;
+import com.sparrowx.profile.valueobjects.AvatarUrl;
 import com.sparrowx.profile.valueobjects.Email;
+import com.sparrowx.profile.valueobjects.FullName;
 import com.sparrowx.profile.valueobjects.UserName;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -9,7 +11,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -18,65 +19,29 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
-public class ProfileEntity extends BaseEntity<UUID> {
+public class ProfileEntity extends BaseEntity {
 
     @Embedded
     private Email email;
 
     @Embedded
-    private UserName username;
+    private UserName userName;
 
-    @Column(name = "join_date", nullable = false)
-    private LocalDate joinDate;
+    @Column(name = "full_name", nullable = false)
+    private FullName fullName;
 
-    @Column(length = 280)
-    private String bio;
-
-    private String location;
-
-    private String website;
-
-    @Column(name = "birth_date")
-    private LocalDate birthDate;
-
+    @Column(name = "avatar_url", nullable = false)
     private String avatarUrl;
-    
-    public ProfileEntity(UUID id, Email email, UserName username, LocalDate joinDate) {
-        this.id = id;
+
+    public ProfileEntity(UserName userName, FullName fullName, Email email,  String avatarUrl) {
         this.email = email;
-        this.username = username;
-        this.joinDate = joinDate;
+        this.userName = userName;
+        this.fullName = fullName;
+        this.avatarUrl = avatarUrl;
     }
 
-    public ProfileEntity(UUID id,
-                         Email email,
-                         UserName username,
-                         LocalDate joinDate,
-                         String bio,
-                         String location,
-                         String website,
-                         LocalDate birthDate,
-                         String avatarUrl,
-                         java.time.LocalDateTime createdAt,
-                         Long createdBy,
-                         java.time.LocalDateTime lastModified,
-                         Long lastModifiedBy,
-                         Long version,
-                         boolean isDeleted) {
-        this.id = id;
-        this.email = email;
-        this.username = username;
-        this.joinDate = joinDate;
-        this.bio = bio;
-        this.location = location;
-        this.website = website;
-        this.birthDate = birthDate;
-        this.avatarUrl = avatarUrl;
-        this.createdAt = createdAt;
-        this.createdBy = createdBy;
-        this.lastModified = lastModified;
-        this.lastModifiedBy = lastModifiedBy;
-        this.version = version;
-        this.isDeleted = isDeleted;
+    public void updateAvatarUrl(String newUrl) {
+        this.avatarUrl = newUrl;
     }
+
 }

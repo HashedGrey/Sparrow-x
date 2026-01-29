@@ -1,9 +1,7 @@
 package com.sparrowx.profile.features.profile;
 
-
 import buildingblocks.mediator.abstractions.IMediator;
 import com.sparrowx.profile.dtos.ProfileDto;
-import com.sparrowx.profile.features.Mappings;
 import com.sparrowx.profile.features.profile.createprofile.CreateProfileCommand;
 import com.sparrowx.profile.features.profile.createprofile.CreateProfileRequestDto;
 import com.sparrowx.profile.mappers.ProfileMapper;

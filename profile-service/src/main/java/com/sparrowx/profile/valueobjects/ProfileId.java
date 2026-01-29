@@ -1,24 +1,14 @@
 package com.sparrowx.profile.valueobjects;
 
-
-import buildingblocks.utils.validation.ValidationUtils;
-import jakarta.persistence.Embeddable;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-
 import java.util.UUID;
 
-@Embeddable
-@EqualsAndHashCode
-@NoArgsConstructor
-@Getter
-public class ProfileId {
+public record ProfileId(UUID value) {
 
-    private UUID value;
+    public static ProfileId newId() {
+        return new ProfileId(UUID.randomUUID());
+    }
 
-    public ProfileId(UUID value) {
-        ValidationUtils.notBeNullOrEmpty(value);
-        this.value = value;
+    public String toString() {
+        return value.toString();
     }
 }

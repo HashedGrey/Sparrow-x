@@ -20,14 +20,14 @@ public class ProfileTable {
     @PrimaryKey
     private UUID id;
 
-    private String email;
-
     private String userName;
 
     private String fullName;
 
-    private LocalDate joinDate;
+    private String email;
 
     private String avatarUrl;
+
+    private LocalDate joinDate;
 
 }

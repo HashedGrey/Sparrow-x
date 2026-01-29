@@ -24,9 +24,6 @@ public class FollowCreatedListener implements MessageHandler<FollowCreated> {
                 new KeyValuePair("follow_created_event", JsonConverterUtils.serializeObject(event))
         );
 
-        // 🔹 Example actions:
-        // - Update "followers" count in Postgres
-        // - Insert new follow edge in Neo4j
-        // - Cache follower relationship in Redis
+
     }
 }

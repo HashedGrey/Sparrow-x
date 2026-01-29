@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -20,7 +21,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
-public class FollowEntity extends BaseEntity<UUID> {
+public class FollowEntity extends BaseEntity {
 
     @Column(name = "follower_id", nullable = false)
     private UUID followerId;
@@ -37,9 +38,9 @@ public class FollowEntity extends BaseEntity<UUID> {
     public FollowEntity(UUID id,
                         UUID followerId,
                         UUID followeeId,
-                        java.time.LocalDateTime createdAt,
+                        Instant createdAt,
                         Long createdBy,
-                        java.time.LocalDateTime lastModified,
+                        Instant lastModified,
                         Long lastModifiedBy,
                         Long version,
                         boolean isDeleted) {
