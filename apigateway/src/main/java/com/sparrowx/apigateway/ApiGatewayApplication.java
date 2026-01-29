@@ -1,4 +1,4 @@
-package com.distributedx.apigateway;
+package com.sparrowx.apigateway;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

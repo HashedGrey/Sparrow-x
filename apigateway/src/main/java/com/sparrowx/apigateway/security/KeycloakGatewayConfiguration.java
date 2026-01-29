@@ -1,4 +1,4 @@
-package com.distributedx.apigateway;
+package com.sparrowx.apigateway.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
