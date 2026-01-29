@@ -13,16 +13,16 @@ The Twitter clone is intentionally “just the substrate,” inspired by Grok’
 
 Under the hood, Sparrowx is goal-oriented and OODA-looped. Every request is framed as a concrete objective (eg. “find high-signal researchers,” “verify claims against PDFs,” “summarize contradictions,” “recommend accounts to follow”). The system then runs an Observe → Orient → Decide → Act cycle: it observes live social signals and retrieved documents, orients by building context (embeddings + metadata + reputation/engagement features), decides on the next best action (retrieve, rerank, validate, call a tool, expand search, generate a report), and acts, executing those steps via an action registry/tooling layer until the goal is met or budgets/timeouts are reached.
 
->"Hey Chat, Given the following PDFs:  
->• GPT-5 System Card (System Card).  
->• Stanford Research PDF — “Routed LLM Systems Under Stress: External Validity, Hidden Conditionals, and Failure Modes in GPT-5-Style Routers” (Independent Evaluation)  
->• Preparedness Framework v2 (security/Compliance risk controls and safeguard posture)  
+>*"Hey Chat, Given the following PDFs:*  
+>*• GPT-5 System Card (System Card).*  
+>*• Stanford Research PDF — “Routed LLM Systems Under Stress: External Validity, Hidden Conditionals, and Failure Modes in GPT-5-Style Routers” (Independent Evaluation)*  
+>*• Preparedness Framework v2 (security/Compliance risk controls and safeguard posture)*  
 > 
->Extract and dedupe all testable claims `{metric, benchmark, conditions, value}` into claim clusters.  
->For each cluster generate targeted queries (model aliases + benchmark names + critique keywords) and retrieve the relevant tweet 
+>*Extract and dedupe all testable claims `{metric, benchmark, conditions, value}` into claim clusters.*  
+>*For each cluster generate targeted queries (model aliases + benchmark names + critique keywords) and retrieve the relevant tweet 
 discussions (including full tweets/threads, metadata, and author signals). Cluster tweets per claim and label 
 **confirm / mismatch / contradict / unknown** then rank **claim clusters** by impact×confidence×contradiction-density 
-and rank **authors** by credibility×insight-velocity×claim-relevance, with citations to the source PDF sections."
+and rank **authors** by credibility×insight-velocity×claim-relevance, with citations to the source PDF sections."*
 
 ## Goals Of This Project
 - 🔹 Using Agentic RAG powered by Embabel: The system decomposes a user goal into retrieval and reasoning actions, dynamically combining hyper-search over tweets, relationship-aware lookups, and vector-based semantic recall; all expressed through natural-language intent rather than fixed queries. 
