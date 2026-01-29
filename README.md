@@ -1,6 +1,12 @@
 
 # Sparrow-X
 
+## 🔁 Sparrowx Runtime Traffic Flow
+
+![Sparrowx Linkerd Data Flow](resources/sp-linkerd-flow.gif)
+
+*Animated service-to-service data flow inside the Sparrowx mesh.*
+
 A distributed-systems playground where the flagship feature is Agentic RAG: Which ingests realistic social-network signals—profiles, follows, replies, reposts, likes, bookmarks, search queries, and link-outs to long-form artifacts (PDFs in MinIO)—and turns them into goal-driven LLM workflows for queries, insights, and experiments.
 
 The Twitter clone is intentionally “just the substrate,” inspired by Grok’s premise: at large scale, a stream of hundreds of millions of daily interactions can make a network feel like a second-generation directory of human knowledge. Sparrowx distills that same idea into an accessible MVP—useful for junior devs learning bottom-up (how each service and data flow works), and for senior engineers coming from other stacks learning top-down (how the platform behaves end-to-end).
