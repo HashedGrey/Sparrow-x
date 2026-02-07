@@ -60,7 +60,6 @@ and rank **authors** by credibility×insight-velocity×claim-relevance, with cit
 | Building Blocks      |         |            |     ✅       |
 | Fanout Service         |    ✅     |             |           |
 | Profile Service         |        |     ✅        |           |
-| Storage Service         | ✅       |             |           |
 | Search Service | ✅       |             |           |
 | Timeline Service | ✅       |             |           |
 | Tweet Service | ✅       |             |           |
