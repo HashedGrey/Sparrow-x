@@ -1,0 +1,343 @@
+agentic-service (HYBRID: Service-1 core + Service-2 plumbing)
+└── src
+    └── main
+        ├── java
+        │   └── com
+        │       └── sparrowx
+        │           └── agentic
+        │               ├── AgenticApplication.java
+        │               │   // Spring Boot entrypoint: starts service, health probes, observability bootstrap.
+        │               │
+        │               ├── config
+        │               │   ├── AgenticServiceConfiguration.java
+        │               │   │   // Composition root: wires Engine, Planner, Registries, DICE, Policies, Memory facade.
+        │               │   ├── GrpcConfiguration.java
+        │               │   │   // gRPC server setup: ports, pools, interceptors, keepalive, limits, backpressure.
+        │               │   ├── LlmConfiguration.java
+        │               │   │   // LLM runtime: model selectors/mixer, timeouts, retries/fallbacks, JSON mode/validators.
+        │               │   ├── EmbeddingConfiguration.java
+        │               │   │   // Embeddings: BGE Large, batching, dims, caching, retry/backoff, provider failover.
+        │               │   ├── DiceConfiguration.java
+        │               │   │   // DICE wiring: ContextAssembler, projections, binders, contract/version registry.
+        │               │   ├── EvidenceConfiguration.java
+        │               │   │   // Evidence-only stores: ClaimIndex, ES/Milvus adapters; forbids “user truth” persistence.
+        │               │   ├── MemoryConfiguration.java
+        │               │   │   // Mission cache + evidence memory tiers: TTLs, eviction, indexing rules (evidence-only).
+        │               │   ├── SearchConfiguration.java
+        │               │   │   // Hybrid retrieval: ES, Milvus, local index; query parsers, filters, knobs.
+        │               │   ├── IngestionConfiguration.java
+        │               │   │   // Evidence ingestion: schedulers, rate limits, connector creds, safe parsing flags.
+        │               │   └── SecurityConfiguration.java
+        │               │       // Security: Keycloak, Linkerd mTLS, RBAC evaluator for tools/actions, audit hooks.
+        │               │
+        │               ├── dice
+        │               │   ├── ContextAssembler.java
+        │               │   │   // Builds typed mission context from LIVE sp domain state + evidence summaries (versioned).
+        │               │   ├── ContextProjection.java
+        │               │   │   // Stable prompt projections derived from domain models (no raw DB dumps).
+        │               │   ├── ContextVersioning.java
+        │               │   │   // Projection compatibility across releases; can downshift to older context versions.
+        │               │   ├── DomainBinder.java
+        │               │   │   // Converts LLM outputs into typed domain commands/queries; rejects/repairs invalid structs.
+        │               │   ├── ConstraintBinder.java
+        │               │   │   // Deterministically injects budgets/SLO constraints into plans (no LLM discretion).
+        │               │   ├── GuardrailBinder.java
+        │               │   │   // Enforces invariants: “use domain reads”, “cite evidence pointers”, “no invented state”.
+        │               │   └── prompt
+        │               │       ├── DicePromptFragments.java
+        │               │       │   // Loads and composes DICE fragments; versioned templates for inference layer.
+        │               │       ├── DomainContracts.java
+        │               │       │   // Canonical tool + domain schemas used in prompts/validators (SSOT).
+        │               │       └── ToolContracts.java
+        │               │           // Canonical tool IO contracts incl costs/constraints/auth (SSOT).
+        │               │
+        │               ├── domain
+        │               │   ├── model
+        │               │   │   ├── User.java
+        │               │   │   │   // Authoritative user shape (ids, locale, safety flags, segments).
+        │               │   │   ├── Tweet.java
+        │               │   │   │   // Tweet aggregate view (id, author, text/media refs, visibility, engagement).
+        │               │   │   ├── TimelineSlice.java
+        │               │   │   │   // Window of timeline results + rank features + freshness metadata.
+        │               │   │   ├── Profile.java
+        │               │   │   │   // Profile state (bio, header/avatar refs, trust signals, privacy settings).
+        │               │   │   ├── FollowGraph.java
+        │               │   │   │   // Relationship snapshot (follows/mutes/blocks) with strength + last updated.
+        │               │   │   ├── EngagementWindow.java
+        │               │   │   │   // Time-decayed engagement aggregates with timestamps.
+        │               │   │   ├── Trend.java
+        │               │   │   │   // Trend entity (topic, score, signals, region/time slice).
+        │               │   │   ├── SearchQueryIntent.java
+        │               │   │   │   // Parsed query intent (entities, filters, time range, safety constraints, levers).
+        │               │   │   ├── PolicyDecision.java
+        │               │   │   │   // Policy evaluation output (allow/deny/redact, reasons, transformations).
+        │               │   │   └── EvidenceItem.java
+        │               │   │       // Evidence pointer with provenance chain + retrieval handles.
+        │               │   │
+        │               │   ├── services
+        │               │   │   ├── UserContextService.java
+        │               │   │   │   // Computes user context from Profile + FollowGraph + EngagementWindow.
+        │               │   │   ├── TimelineContextService.java
+        │               │   │   │   // Builds timeline context from TimelineSlice + freshness rules + policy constraints.
+        │               │   │   ├── SearchContextService.java
+        │               │   │   │   // Produces search context: intent, ranking knobs, constraints, “why” explanations.
+        │               │   │   ├── TrendContextService.java
+        │               │   │   │   // Builds trend context from Trends state + contributing signals.
+        │               │   │   └── PolicyService.java
+        │               │   │       // Central policy engine: visibility, compliance, limits, trust/safety transforms.
+        │               │   │
+        │               │   ├── ports
+        │               │   │   ├── TweetPort.java
+        │               │   │   │   // Typed contract for TweetService reads/writes needed by agent.
+        │               │   │   ├── ProfilePort.java
+        │               │   │   │   // Typed contract for ProfileService state (profile, graph, trust signals).
+        │               │   │   ├── TimelinePort.java
+        │               │   │   │   // Typed contract for TimelineService state (slices, rank features).
+        │               │   │   ├── SearchPort.java
+        │               │   │   │   // Typed contract for SearchService state (pipeline + explain/debug safely).
+        │               │   │   ├── TrendsPort.java
+        │               │   │   │   // Typed contract for TrendsService state (spikes, contributors, region/time slices).
+        │               │   │   └── EvidencePort.java
+        │               │   │       // Evidence retrieval port (claims/docs) solely for citation-backed reasoning.
+        │               │   │
+        │               │   └── commands
+        │               │       ├── BuildTimelineCommand.java
+        │               │       ├── ExplainSearchResultCommand.java
+        │               │       ├── InvestigateTrendSpikeCommand.java
+        │               │       └── SafetyReviewCommand.java
+        │               │
+        │               ├── adapters
+        │               │   ├── grpc
+        │               │   │   ├── TweetGrpcAdapter.java
+        │               │   │   ├── ProfileGrpcAdapter.java
+        │               │   │   ├── TimelineGrpcAdapter.java
+        │               │   │   ├── SearchGrpcAdapter.java
+        │               │   │   └── TrendsGrpcAdapter.java
+        │               │   │
+        │               │   ├── evidence
+        │               │   │   ├── ClaimIndexAdapter.java
+        │               │   │   │   // Canonical claims + provenance pointers (evidence only).
+        │               │   │   ├── VectorEvidenceAdapter.java
+        │               │   │   │   // Milvus semantic retrieval; returns EvidenceItems w/ provenance.
+        │               │   │   ├── ElasticEvidenceAdapter.java
+        │               │   │   │   // ES keyword/metadata retrieval (time, author, source filters).
+        │               │   │   └── LocalDocIndexAdapter.java
+        │               │   │       // Local index for exact/section retrieval (fast grounding, PDF chunks).
+        │               │   │
+        │               │   └── connectors
+        │               │       ├── PdfConnector.java
+        │               │       ├── WebDocConnector.java
+        │               │       └── TweetAsEvidenceConnector.java
+        │               │
+        │               ├── engine
+        │               │   ├── AgentEngine.java
+        │               │   │   // Mission lifecycle: Intent → DICE bind → PlanGraph → Execute → Synthesize (citations).
+        │               │   ├── ExecutionContext.java
+        │               │   │   // Ephemeral per-mission state: traceId, budgets, domain snapshots, evidence handles.
+        │               │   ├── DomainSnapshotCache.java
+        │               │   │   // Mission-local cache of LIVE gRPC reads; TTL=mission; dedupe fan-out.
+        │               │   ├── EvidenceCollector.java
+        │               │   │   // Collects EvidenceItems, verifies provenance completeness, prepares citation payload.
+        │               │   ├── PlanExecutor.java
+        │               │   │   // Executes nodes w/ retries + budgets; supports sync + async node execution.
+        │               │   ├── ResultSynthesizer.java
+        │               │   │   // Final response from domain facts + cited evidence; emits confidence + rationale.
+        │               │   └── memory
+        │               │       ├── ExecutionMemory.java
+        │               │       │   // Facade for mission cache + evidence memories (no “user truth” writes).
+        │               │       ├── MissionCache.java
+        │               │       │   // Short-lived LRU for transient artifacts, dedupe, and partial results.
+        │               │       ├── EvidenceVectorStore.java
+        │               │       │   // Persistent vectors for evidence artifacts only (Milvus).
+        │               │       ├── EvidenceClaimIndex.java
+        │               │       │   // Claim index storing canonical claims + provenance (not domain truth).
+        │               │       ├── MemoryIndexingService.java
+        │               │       │   // Indexes evidence artifacts into vector store/claim index with provenance.
+        │               │       └── MemoryPolicy.java
+        │               │           // Decides what to retain/evict (strictly evidence + mission artifacts).
+        │               │
+        │               ├── planning
+        │               │   ├── Planner.java
+        │               │   │   // Builds PlanGraph from typed commands + constraints; minimizes nondeterminism.
+        │               │   ├── IntentResolver.java
+        │               │   │   // User mission → canonical typed intent (validated JSON → domain command).
+        │               │   ├── PlanGraph.java
+        │               │   │   // DAG: domain reads → policy gate → evidence retrieval → validate → synth.
+        │               │   ├── PlanNode.java
+        │               │   │   // Step: action/tool reference, inputs, deps, expected outputs, validation rules.
+        │               │   ├── StrategySelector.java
+        │               │   │   // Chooses fast vs research path using budgets + SLA + evidence requirements.
+        │               │   └── goap
+        │               │       ├── DeterministicPlanner.java
+        │               │       │   // Optional GOAP planner for deterministic plan construction (plug-in).
+        │               │       ├── Goal.java
+        │               │       ├── Condition.java
+        │               │       └── ActionSpec.java
+        │               │
+        │               ├── registry
+        │               │   ├── ActionRegistry.java
+        │               │   │   // Runtime registry for actions (schema, cost, latency, auth, constraints).
+        │               │   ├── ToolRegistry.java
+        │               │   │   // Registry for LLM-visible tools (domain reads + evidence tools) w/ versioning.
+        │               │   ├── ActionDescriptor.java
+        │               │   │   // Metadata: IO schema version, cost, latency SLO, retries, auth requirements.
+        │               │   ├── ToolDescriptor.java
+        │               │   │   // Tool IO + permission + budget metadata; aligns with ToolContracts.
+        │               │   ├── ContractRegistry.java
+        │               │   │   // Canonical IO schemas: intents, plans, actions/tools (SSOT w/ Dice contracts).
+        │               │   └── ClasspathRegistrar.java
+        │               │       // Auto-discovers @AgentAction and @AgentTool beans on startup.
+        │               │
+        │               ├── actions
+        │               │   ├── base
+        │               │   │   ├── Action.java
+        │               │   │   │   // Synchronous action contract.
+        │               │   │   └── AsyncAction.java
+        │               │   │       // Long-running/parallel action contract with cancellation.
+        │               │   │
+        │               │   ├── domain
+        │               │   │   ├── ReadUserStateAction.java
+        │               │   │   ├── ReadTweetStateAction.java
+        │               │   │   ├── ReadTimelineStateAction.java
+        │               │   │   ├── ReadSearchStateAction.java
+        │               │   │   └── ReadTrendsStateAction.java
+        │               │   │
+        │               │   ├── evidence
+        │               │   │   ├── RetrieveEvidenceAction.java
+        │               │   │   │   // Hybrid retrieval: ES+Milvus+local index → EvidenceItems.
+        │               │   │   ├── FetchPdfEvidenceAction.java
+        │               │   │   ├── ExtractClaimsAction.java
+        │               │   │   └── CrossCheckClaimsAction.java
+        │               │   │
+        │               │   ├── enforcement
+        │               │   │   ├── ValidateAgainstDomainAction.java
+        │               │   │   ├── PolicyGateAction.java
+        │               │   │   └── BudgetGateAction.java
+        │               │   │
+        │               │   └── ingestion
+        │               │       ├── BulkTweetEvidenceIngestAction.java
+        │               │       │   // High-throughput ingestion of tweet-as-evidence (artifact-only).
+        │               │       ├── EvidenceFetchJobAction.java
+        │               │       │   // Triggers fetch/parse/index pipeline for docs/whitepapers.
+        │               │       └── SectionExtractAction.java
+        │               │           // Extracts methodology/limitations sections for stronger provenance.
+        │               │
+        │               ├── ingestion
+        │               │   ├── pipeline
+        │               │   │   ├── IngestionScheduler.java
+        │               │   │   ├── FetchJobWorker.java
+        │               │   │   └── IndexEvidencePipeline.java
+        │               │   ├── connectors
+        │               │   │   ├── UrlFetcher.java
+        │               │   │   ├── PdfParser.java
+        │               │   │   └── MetadataNormalizer.java
+        │               │   └── transform
+        │               │       ├── ClaimCanonicalizer.java
+        │               │       ├── ProvenanceBuilder.java
+        │               │       ├── SectionClassifier.java
+        │               │       └── PrivacyRedactionService.java
+        │               │
+        │               ├── inference
+        │               │   ├── ChatGptClient.java
+        │               │   ├── EmbeddingClient.java
+        │               │   └── PromptTemplates.java
+        │               │
+        │               ├── dynamicllm
+        │               │   ├── ModelMixer.java
+        │               │   │   // Mixes models by phase (intent/planning/synthesis) using cost+quality heuristics.
+        │               │   └── ModelCostEstimator.java
+        │               │       // Estimates cost/latency per-model for StrategySelector and BudgetGate.
+        │               │
+        │               ├── validation
+        │               │   ├── SchemaRegistry.java
+        │               │   │   // Canonical schemas for intents/plans/tool IO and DICE projections (SSOT).
+        │               │   ├── SchemaValidator.java
+        │               │   │   // Validates LLM JSON outputs against ContractRegistry.
+        │               │   ├── DiceContractValidator.java
+        │               │   ├── LlmRepairService.java
+        │               │   └── HallucinationDetector.java
+        │               │
+        │               ├── governance
+        │               │   ├── ProvenanceVerifier.java
+        │               │   ├── AgreementPolicy.java
+        │               │   └── AuditTrailService.java
+        │               │
+        │               ├── compliance
+        │               │   ├── ComplianceFilter.java
+        │               │   └── PrivacyRedactionService.java
+        │               │
+        │               ├── grpc
+        │               │   ├── server
+        │               │   │   └── AgenticServiceGrpcImpl.java
+        │               │   │       // gRPC API: missions, streaming progress/events, results + citations payloads.
+        │               │   ├── interceptors
+        │               │   │   ├── GrpcAuthInterceptor.java
+        │               │   │   ├── GrpcTracingInterceptor.java
+        │               │   │   ├── GrpcMetricsInterceptor.java
+        │               │   │   └── GrpcBudgetInterceptor.java
+        │               │   ├── client
+        │               │   │   ├── TweetGrpcClient.java
+        │               │   │   ├── ProfileGrpcClient.java
+        │               │   │   ├── TimelineGrpcClient.java
+        │               │   │   ├── SearchGrpcClient.java
+        │               │   │   ├── TrendsGrpcClient.java
+        │               │   │   └── EvidenceGrpcClient.java
+        │               │   └── policies
+        │               │       └── AgentResiliencePolicy.java
+        │               │           // Retries, circuit breakers, timeouts for external/domain calls.
+        │               │
+        │               ├── mcp
+        │               │   ├── McpServerClient.java
+        │               │   │   // Optional: discover/invoke external MCP tools ONLY as evidence tools (no domain writes).
+        │               │   └── McpToolRegistry.java
+        │               │       // Tracks MCP tools, versions, compatibility; gated by AgreementPolicy.
+        │               │
+        │               ├── exception
+        │               │   ├── PlanningException.java
+        │               │   ├── ActionExecutionException.java
+        │               │   ├── ValidationException.java
+        │               │   └── AgentServiceException.java
+        │               │
+        │               ├── proto
+        │               │   ├── agentic.proto
+        │               │   │   // Mission contract: streaming missions/progress, result payload w/ citations.
+        │               │   └── domain_tools.proto
+        │               │       // Domain read tools (tweet/profile/timeline/search/trends) + evidence retrieval tools.
+        │               │
+        │               └── resources
+        │                   ├── application.yml
+        │                   │   # Endpoints, security, observability exporters, timeouts, budgets, registry toggles.
+        │                   ├── application-dev.yml
+        │                   │   # Dev overrides: mocks, relaxed limits, local creds.
+        │                   ├── prompts
+        │                   │   ├── system.jinja
+        │                   │   ├── intent_parsing.jinja
+        │                   │   ├── retrieval_guidance.jinja
+        │                   │   ├── synthesis.jinja
+        │                   │   └── dice_context.jinja
+        │                   └── grpc
+        │                       └── agentic.proto.config.json
+        │                           # Method configs: deadlines, retry policies, budgets, backpressure hints.
+        │
+        └── test
+            ├── java
+            │   └── com
+            │       └── sparrowx
+            │           └── agentic
+            │               ├── ContextAssemblerTest.java
+            │               ├── ContextVersioningTest.java
+            │               ├── DomainBinderTest.java
+            │               ├── ValidateAgainstDomainActionTest.java
+            │               ├── EvidenceRetrievalTest.java
+            │               ├── PlannerDeterminismTest.java
+            │               ├── RegistryDiscoveryTest.java
+            │               │   // Ensures @AgentAction/@AgentTool discovery and schema registration is stable.
+            │               ├── AsyncExecutionTest.java
+            │               │   // Ensures parallel retrieval actions respect BudgetGate and PolicyGate ordering.
+            │               └── EndToEndMissionTest.java
+            │                   // Full lifecycle: intent→plan→domain reads→evidence→validate→synth (citations).
+            │
+            └── resources
+                └── test-prompts
+                    └── sample_mission.jinja
+                        # End-to-end mission prompt fixture for deterministic regression tests.
