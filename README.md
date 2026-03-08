@@ -55,13 +55,12 @@ and rank **authors** by credibility×insight-velocity×claim-relevance, with cit
 
 | Feature              | Dormant | In Progress | Completed |
 |----------------------|---------|-------------|-----------|
-| API Gateway          |        |             |      ✅     |
+| API Gateway          |        |      ✅       |           |
 | Agentic Service          |    ✅    |             |           |
-| Building Blocks      |         |            |     ✅       |
-| Fanout Service         |    ✅     |             |           |
-| Profile Service         |        |     ✅        |           |
+| Building Blocks      |         |    ✅        |            |
+| Profile Service         |    ✅    |             |           |
 | Search Service | ✅       |             |           |
 | Timeline Service | ✅       |             |           |
-| Tweet Service | ✅       |             |           |
+| Tweet Service |        |       ✅      |           |
 
 
