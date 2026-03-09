@@ -1,371 +1,393 @@
-agentic-rag-service v3 (DICE-integrated; metadata normalized in projection)
-
 agentic-rag-service
 ├── pom.xml
-│   // Spring Boot + Embabel starters + gRPC + OTEL + security + ES/Milvus clients.
-│   // Keep dependencies framework-first; avoid recreating agent runtime internals.
+│ // Spring Boot + Embabel starters + gRPC + OTEL + security + ES/Milvus clients.
+│ // Keep dependencies framework-first; avoid recreating agent runtime internals.
 │
 ├── README.md
-│   // Mission examples, evidence-only guarantees, architecture boundaries, deployment notes.
+│ // Mission examples, evidence-only guarantees, architecture boundaries, deployment notes.
 │
 ├── scripts
-│   ├── docker
-│   │   └── Dockerfile
-│   │       // Multi-stage build, non-root runtime, healthchecks, minimal base image.
-│   ├── k8s
-│   │   ├── deployment.yaml
-│   │   │   // Probes, resources, OTEL env, config/secret mounts, HPA labels.
-│   │   ├── service.yaml
-│   │   │   // gRPC/HTTP ports and selectors.
-│   │   ├── hpa.yaml
-│   │   │   // Scale policy based on CPU + queue depth / custom latency metrics.
-│   │   ├── networkpolicy.yaml
-│   │   │   // Restrict egress/ingress to approved dependencies only.
-│   │   └── podmonitor.yaml
-│   │       // Prometheus scrape config.
-│   └── local
-│       ├── docker-compose.yml
-│       │   // Local ES, Milvus, MinIO, optional Keycloak, OTEL collector.
-│       └── seed-data.sh
-│           // Loads sample PDFs / mock tweets for local eval runs.
+│ ├── docker
+│ │ └── Dockerfile
+│ │ // Multi-stage build, non-root runtime, healthchecks, minimal base image.
+│ ├── k8s
+│ │ ├── deployment.yaml
+│ │ │ // Probes, resources, OTEL env, config/secret mounts, HPA labels.
+│ │ ├── service.yaml
+│ │ │ // gRPC/HTTP ports and selectors.
+│ │ ├── hpa.yaml
+│ │ │ // Scale policy based on CPU + queue depth / custom latency metrics.
+│ │ ├── networkpolicy.yaml
+│ │ │ // Restrict egress/ingress to approved dependencies only.
+│ │ └── podmonitor.yaml
+│ │ // Prometheus scrape config.
+│ └── local
+│ ├── docker-compose.yml
+│ │ // Local ES, Milvus, MinIO, optional Keycloak, OTEL collector.
+│ ├── seed-data.sh
+│ │ // Loads sample PDFs / mock tweets for local eval runs.
+│ └── shell.sh
+│ // Launch helper for Spring Shell + uichat (local Ragbot shell / UI commands).
 │
 └── src
-    ├── main
-    │   ├── java/com/sparrowx/agenticrag
-    │   │   ├── AgenticRagApplication.java
-    │   │   │   // Spring Boot entrypoint; enables Embabel components and service APIs.
-    │   │   │
-    │   │   ├── config
-    │   │   │   ├── EmbabelPlatformConfig.java
-    │   │   │   │   // Embabel platform wiring: agent components, model providers, tool groups.
-    │   │   │   ├── RuntimeConfig.java
-    │   │   │   │   // Service composition root: stores, ports, governance, policy wrappers.
-    │   │   │   ├── LlmConfig.java
-    │   │   │   │   // Model endpoints, structured output settings, retries, fallbacks, budgets.
-    │   │   │   ├── RetrievalConfig.java
-    │   │   │   │   // ES + Milvus + local index wiring, chunking knobs, alias dictionaries.
-    │   │   │   ├── IngestionConfig.java
-    │   │   │   │   // Scheduler pools, rate limits, parser safety flags, backfill controls.
-    │   │   │   ├── GrpcHttpConfig.java
-    │   │   │   │   // gRPC/HTTP server setup, limits, keepalive, streaming/backpressure.
-    │   │   │   ├── SecurityConfig.java
-    │   │   │   │   // Keycloak/JWT, RBAC evaluators, tenant context propagation.
-    │   │   │   └── ObservabilityConfig.java
-    │   │   │       // OTEL tracing/metrics/logging exporters, correlation IDs, log policy.
-    │   │   │
-    │   │   ├── api
-    │   │   │   ├── grpc
-    │   │   │   │   ├── AgenticRagGrpcImpl.java
-    │   │   │   │   │   // Public mission API: submit/stream result progress/final output.
-    │   │   │   │   ├── interceptors
-    │   │   │   │   │   ├── GrpcAuthInterceptor.java
-    │   │   │   │   │   ├── GrpcTracingInterceptor.java
-    │   │   │   │   │   ├── GrpcMetricsInterceptor.java
-    │   │   │   │   │   └── GrpcBudgetInterceptor.java
-    │   │   │   │   │       // Boundary enforcement for auth/tracing/metrics/budget ceilings.
-    │   │   │   │   └── policies
-    │   │   │   │       └── AgentResiliencePolicy.java
-    │   │   │   │           // Retries/CBs/timeouts/hedging for downstream domain/evidence calls.
-    │   │   │   └── http
-    │   │   │       ├── AdminController.java
-    │   │   │       │   // Index health, backfills, policy diagnostics.
-    │   │   │       └── EvalController.java
-    │   │   │           // Internal test mission execution endpoints (RBAC-gated).
-    │   │   │
-    │   │   ├── mission
-    │   │   │   ├── model
-    │   │   │   │   ├── MissionRequest.java
-    │   │   │   │   │   // User mission + attachments + explicit constraints/budgets.
-    │   │   │   │   ├── MissionProgressEvent.java
-    │   │   │   │   │   // Progress stream events for clients/UIs.
-    │   │   │   │   ├── MissionResult.java
-    │   │   │   │   │   // Ranked claim clusters, tweet clusters, author rankings, citations.
-    │   │   │   │   └── MissionContext.java
-    │   │   │   │       // Trace, tenant, budgets, policy decisions, temp artifact handles.
-    │   │   │   │
-    │   │   │   ├── MissionFlowCoordinator.java
-    │   │   │   │   // Service-level orchestration around Embabel agent execution + post-processing.
-    │   │   │   ├── MissionPathSelector.java
-    │   │   │   │   // Chooses fast vs research path using SLA/budget constraints.
-    │   │   │   └── MissionStage.java
-    │   │   │       // Canonical stages (ingest → project → extract → dedupe → query → fetch → label → rank → synthesize).
-    │   │   │
-    │   │   ├── dice
-    │   │   │   ├── ContextAssembler.java
-    │   │   │   │   // Builds typed mission context from evidence snapshots + domain signals (versioned).
-    │   │   │   ├── DomainBinder.java
-    │   │   │   │   // Converts LLM outputs into typed commands/objects; rejects/repairs invalid structs.
-    │   │   │   ├── GuardrailBinder.java
-    │   │   │   │   // Enforces invariants: cite SourceRef, no invented metadata, no raw unprojected fields.
-    │   │   │   └── projection
-    │   │   │       ├── ProjectionContext.java
-    │   │   │       │   // Alias dictionaries, locale/timezone rules, normalization knobs, version.
-    │   │   │       ├── EvidenceProjection.java
-    │   │   │       │   // Canonicalizes evidence doc + chunk metadata BEFORE any LLM-visible rendering.
-    │   │   │       ├── MetadataNormalizer.java
-    │   │   │       │   // Normalizes titles/authors/dates/model aliases/benchmark aliases (DICE projection layer).
-    │   │   │       └── ContextProjection.java
-    │   │   │           // Stable LLM prompt projections derived from projected metadata + models.
-    │   │   │
-    │   │   ├── agents
-    │   │   │   ├── ClaimMiningAgent.java
-    │   │   │   │   // Embabel @Agent/@EmbabelComponent for PDF claim extraction + dedupe flow.
-    │   │   │   ├── SocialEvidenceAgent.java
-    │   │   │   │   // Embabel component for targeted query generation + tweet/thread retrieval orchestration.
-    │   │   │   ├── StanceAndRankingAgent.java
-    │   │   │   │   // Embabel component for stance labeling, contradiction density, ranking.
-    │   │   │   └── ReportSynthesisAgent.java
-    │   │   │       // Embabel component for final response synthesis with caveats/citations.
-    │   │   │
-    │   │   ├── actions
-    │   │   │   ├── dice
-    │   │   │   │   └── ProjectEvidenceAction.java
-    │   │   │   │       // Embabel @Action: runs EvidenceProjection so LLM never sees raw metadata.
-    │   │   │   ├── evidence
-    │   │   │   │   ├── ExtractClaimsAction.java
-    │   │   │   │   │   // Embabel @Action: projected chunks → structured testable claims.
-    │   │   │   │   ├── DedupeClaimsAction.java
-    │   │   │   │   │   // Embabel @Action: merge claims into clusters with provenance retained.
-    │   │   │   │   ├── ValidateClaimsAction.java
-    │   │   │   │   │   // Embabel @Action: enforce {metric, benchmark, conditions, value}.
-    │   │   │   │   └── BuildCitationsAction.java
-    │   │   │   │       // Embabel @Action: assemble citation payload from SourceRef(s).
-    │   │   │   │
-    │   │   │   ├── social
-    │   │   │   │   ├── BuildTargetedQueriesAction.java
-    │   │   │   │   │   // Embabel @Action: claim cluster → aliases + benchmarks + critique keywords.
-    │   │   │   │   ├── FetchTweetDiscussionsAction.java
-    │   │   │   │   │   // Embabel @Action: retrieve tweets/threads/metadata under budget and authz.
-    │   │   │   │   ├── ClusterTweetsByClaimAction.java
-    │   │   │   │   │   // Embabel @Action: attach tweets/threads to claim clusters.
-    │   │   │   │   └── RankAuthorsAction.java
-    │   │   │   │       // Embabel @Action: credibility × insight-velocity × claim-relevance.
-    │   │   │   │
-    │   │   │   ├── analysis
-    │   │   │   │   ├── LabelStanceAction.java
-    │   │   │   │   │   // Embabel @Action: confirm/mismatch/contradict/unknown classification.
-    │   │   │   │   ├── ComputeContradictionDensityAction.java
-    │   │   │   │   │   // Embabel @Action: contradiction concentration per cluster.
-    │   │   │   │   └── RankClaimClustersAction.java
-    │   │   │   │       // Embabel @Action: impact × confidence × contradiction-density.
-    │   │   │   │
-    │   │   │   └── governance
-    │   │   │       ├── VerifyProvenanceAction.java
-    │   │   │       │   // Embabel @Action: reject floating citations / broken refs.
-    │   │   │       └── RedactForOutputAction.java
-    │   │   │           // Embabel @Action: redact sensitive content before response/audit.
-    │   │   │
-    │   │   ├── evidence
-    │   │   │   ├── model
-    │   │   │   │   ├── SourceRef.java
-    │   │   │   │   │   // Canonical PDF pointer: doc/page/section/chunk offsets + hashes.
-    │   │   │   │   ├── EvidenceChunk.java
-    │   │   │   │   │   // Parsed text chunk + projected metadata + SourceRef + embedding key.
-    │   │   │   │   ├── Claim.java
-    │   │   │   │   │   // Structured testable claim fields + provenance refs.
-    │   │   │   │   ├── ClaimCluster.java
-    │   │   │   │   │   // Canonical claim + duplicates/variants + supporting refs.
-    │   │   │   │   └── ClaimClusterScore.java
-    │   │   │   │       // impact/confidence/contradiction-density score + reasoning.
-    │   │   │   │
-    │   │   │   ├── ingest
-    │   │   │   │   ├── pipeline
-    │   │   │   │   │   ├── IngestionScheduler.java
-    │   │   │   │   │   ├── FetchJobWorker.java
-    │   │   │   │   │   └── IndexEvidencePipeline.java
-    │   │   │   │   │       // Parse → chunk → project(DICE) → classify → embed → index.
-    │   │   │   │   ├── connectors
-    │   │   │   │   │   ├── PdfFetcher.java
-    │   │   │   │   │   └── PdfParser.java
-    │   │   │   │   │       // NOTE: MetadataNormalizer moved to dice/projection.
-    │   │   │   │   └── transform
-    │   │   │   │       ├── SectionClassifier.java
-    │   │   │   │       │   // Results/methods/limitations tags to improve retrieval and caveats.
-    │   │   │   │       ├── ClaimCanonicalizer.java
-    │   │   │   │       ├── ProvenanceBuilder.java
-    │   │   │   │       └── PrivacyRedactionService.java
-    │   │   │   │
-    │   │   │   ├── extract
-    │   │   │   │   ├── ClaimExtractor.java
-    │   │   │   │   │   // Underlying service used by ExtractClaimsAction (structured output + validation).
-    │   │   │   │   ├── ClaimDedupe.java
-    │   │   │   │   ├── ClaimValidator.java
-    │   │   │   │   └── ClaimClusterExplainer.java
-    │   │   │   │       // Merge rationale for audits/debugging.
-    │   │   │   │
-    │   │   │   └── store
-    │   │   │       ├── EvidenceIndex.java
-    │   │   │       │   // Facade over ES/Milvus/local exact index.
-    │   │   │       ├── EvidenceStore.java
-    │   │   │       │   // Evidence-only artifact/chunk/provenance storage.
-    │   │   │       ├── ClaimStore.java
-    │   │   │       │   // Claim + cluster storage; not domain truth.
-    │   │   │       └── ClaimIndexAdapter.java
-    │   │   │           // Canonical claim lookup for dedupe/cross-doc linking.
-    │   │   │
-    │   │   ├── social
-    │   │   │   ├── model
-    │   │   │   │   ├── TweetDoc.java
-    │   │   │   │   ├── TweetCluster.java
-    │   │   │   │   ├── StanceLabel.java
-    │   │   │   │   └── AuthorScore.java
-    │   │   │   │       // Core social evidence/result models.
-    │   │   │   │
-    │   │   │   ├── query
-    │   │   │   │   ├── TargetedQueryBuilder.java
-    │   │   │   │   └── QueryTemplates.java
-    │   │   │   │       // Alias + critique keyword generation for claims.
-    │   │   │   │
-    │   │   │   ├── fetch
-    │   │   │   │   ├── TweetRetrievalPort.java
-    │   │   │   │   │   // Typed read contract for tweets/threads/metadata.
-    │   │   │   │   ├── TweetThreadHydrator.java
-    │   │   │   │   └── AuthorSignalsPort.java
-    │   │   │   │       // Credibility/expertise/activity features.
-    │   │   │   │
-    │   │   │   └── cluster
-    │   │   │       ├── TweetClusterer.java
-    │   │   │       └── ThreadDeduper.java
-    │   │   │           // Group and dedupe tweet discussions per claim.
-    │   │   │
-    │   │   ├── analysis
-    │   │   │   ├── StanceClassifier.java
-    │   │   │   │   // Underlying classifier used by LabelStanceAction.
-    │   │   │   ├── ContradictionDensity.java
-    │   │   │   ├── ImpactScorer.java
-    │   │   │   ├── AuthorRanker.java
-    │   │   │   └── ResultSynthesizer.java
-    │   │   │       // Final synthesis services used by agents/actions.
-    │   │   │
-    │   │   ├── governance
-    │   │   │   ├── CitationAssembler.java
-    │   │   │   │   // Every claim cluster must map back to SourceRef(s).
-    │   │   │   ├── ProvenanceVerifier.java
-    │   │   │   ├── AuditTrailService.java
-    │   │   │   └── Redaction.java
-    │   │   │       // Enterprise guarantees stay here, not in agent runtime internals.
-    │   │   │
-    │   │   ├── policy
-    │   │   │   ├── BudgetPolicy.java
-    │   │   │   ├── ToolAuthzPolicy.java
-    │   │   │   ├── DataHandlingPolicy.java
-    │   │   │   ├── SafetyPolicy.java
-    │   │   │   ├── CompliancePolicy.java
-    │   │   │   └── AgreementPolicy.java
-    │   │   │       // Deterministic rules that wrap/limit agent behavior.
-    │   │   │
-    │   │   ├── adapters
-    │   │   │   ├── sparrowxgrpc
-    │   │   │   │   ├── TweetGrpcClient.java
-    │   │   │   │   ├── SearchGrpcClient.java
-    │   │   │   │   ├── ProfileGrpcClient.java
-    │   │   │   │   └── TrendsGrpcClient.java
-    │   │   │   │       // Typed domain reads; domain truth lives in Sparrowx services.
-    │   │   │   ├── evidence
-    │   │   │   │   ├── ElasticEvidenceAdapter.java
-    │   │   │   │   ├── VectorEvidenceAdapter.java
-    │   │   │   │   └── LocalDocIndexAdapter.java
-    │   │   │   │       // Retrieval backend adapters returning evidence chunks + refs.
-    │   │   │   └── storage
-    │   │   │       └── MinioEvidenceBlobStore.java
-    │   │   │           // Raw PDFs/chunks as artifacts (evidence-only).
-    │   │   │
-    │   │   ├── prompts
-    │   │   │   ├── PromptPack.java
-    │   │   │   │   // Loads/composes prompts by task/version; uses ContextProjection outputs only.
-    │   │   │   ├── PromptVersions.java
-    │   │   │   └── StructuredOutputSchemas.java
-    │   │   │       // Claim/Cluster/Stance/Ranking JSON schema definitions.
-    │   │   │
-    │   │   ├── validation
-    │   │   │   ├── SchemaValidator.java
-    │   │   │   ├── OutputRepair.java
-    │   │   │   └── HallucinationGuard.java
-    │   │   │       // Thin validation boundary; reject unprojected metadata or uncited claims.
-    │   │   │
-    │   │   ├── mcp
-    │   │   │   ├── McpToolGateway.java
-    │   │   │   └── McpToolPolicyAdapter.java
-    │   │   │       // Optional external tools treated as evidence tools only.
-    │   │   │
-    │   │   ├── exception
-    │   │   │   ├── MissionExecutionException.java
-    │   │   │   ├── PolicyViolationException.java
-    │   │   │   ├── EvidenceProcessingException.java
-    │   │   │   └── ValidationException.java
-    │   │   │
-    │   │   └── util
-    │   │       ├── Jsons.java
-    │   │       ├── RetryPolicies.java
-    │   │       ├── Concurrency.java
-    │   │       └── Timeouts.java
-    │   │           // Thin helpers only.
-    │   │
-    │   └── resources
-    │       ├── application.yml
-    │       │   # endpoints, security, budgets, tool permissions, OTEL exporters, retention, feature flags.
-    │       ├── application-dev.yml
-    │       │   # local creds, mocks, lower limits, verbose tracing.
-    │       ├── prompts
-    │       │   ├── claim_extraction.jinja
-    │       │   ├── claim_dedupe.jinja
-    │       │   ├── targeted_query_gen.jinja
-    │       │   ├── tweet_stance_labeling.jinja
-    │       │   ├── author_scoring.jinja
-    │       │   └── synthesis.jinja
-    │       ├── grpc
-    │       │   └── agentic_rag.proto.config.json
-    │       │       # Method deadlines/retries/budgets/backpressure hints.
-    │       └── proto
-    │           └── agentic_rag.proto
-    │               // Mission API contract: progress stream + ranked outputs + citations.
-    │
-    └── test
-        ├── java/com/sparrowx/agenticrag
-        │   ├── dice
-        │   │   ├── EvidenceProjectionTest.java
-        │   │   ├── MetadataNormalizerTest.java
-        │   │   └── GuardrailBinderTest.java
-        │   │       // Ensures no unprojected metadata can reach prompts/LLM.
-        │   ├── agents
-        │   │   ├── ClaimMiningAgentTest.java
-        │   │   ├── SocialEvidenceAgentTest.java
-        │   │   ├── StanceAndRankingAgentTest.java
-        │   │   └── ReportSynthesisAgentTest.java
-        │   │       // Embabel component behavior tests with mocks/fixtures.
-        │   ├── actions
-        │   │   ├── ProjectEvidenceActionTest.java
-        │   │   ├── ExtractClaimsActionTest.java
-        │   │   ├── DedupeClaimsActionTest.java
-        │   │   ├── FetchTweetDiscussionsActionTest.java
-        │   │   ├── LabelStanceActionTest.java
-        │   │   └── RankClaimClustersActionTest.java
-        │   │       // Deterministic action-level tests.
-        │   ├── evidence
-        │   │   ├── SectionClassifierTest.java
-        │   │   ├── ProvenanceBuilderTest.java
-        │   │   └── ClaimValidatorTest.java
-        │   ├── governance
-        │   │   ├── CitationAssemblerTest.java
-        │   │   ├── ProvenanceVerifierTest.java
-        │   │   └── HallucinationGuardTest.java
-        │   ├── api
-        │   │   ├── GrpcInterceptorsTest.java
-        │   │   └── AgentResiliencePolicyTest.java
-        │   └── integration
-        │       └── EndToEndClaimToTweetRankingTest.java
-        │           // PDFs → project(DICE) → claims/clusters → queries → tweets → stance → ranking + citations.
-        └── resources
-            ├── fixtures
-            │   ├── pdfs/
-            │   │   ├── gpt5_system_card_sample.pdf
-            │   │   ├── routed_llm_stress_eval_sample.pdf
-            │   │   └── preparedness_framework_v2_sample.pdf
-            │   ├── tweets/
-            │   │   ├── threads_sample.json
-            │   │   └── author_signals_sample.json
-            │   └── claims/
-            │       └── expected_claim_clusters.json
-            └── prompts
-                └── sample_mission.txt
-                    // Canonical mission fixture for regression tests.
+├── main
+│ ├── java/com/sparrowx/agenticrag
+│ │ ├── AgenticRagApplication.java
+│ │ │ // Spring Boot entrypoint; enables Embabel components and service APIs.
+│ │ │
+│ │ ├── config
+│ │ │ ├── EmbabelPlatformConfig.java
+│ │ │ │ // Embabel platform wiring: agent components, model providers, tool groups.
+│ │ │ ├── RuntimeConfig.java
+│ │ │ │ // Service composition root: stores, ports, governance, policy wrappers.
+│ │ │ ├── LlmConfig.java
+│ │ │ │ // Model endpoints, structured output settings, retries, fallbacks, budgets.
+│ │ │ ├── RetrievalConfig.java
+│ │ │ │ // ES + Milvus + local index wiring, chunking knobs, alias dictionaries.
+│ │ │ ├── IngestionConfig.java
+│ │ │ │ // Scheduler pools, rate limits, parser safety flags, backfill controls.
+│ │ │ ├── GrpcHttpConfig.java
+│ │ │ │ // gRPC/HTTP server setup, limits, keepalive, streaming/backpressure.
+│ │ │ ├── SecurityConfig.java
+│ │ │ │ // Keycloak/JWT, RBAC evaluators, tenant context propagation.
+│ │ │ ├── ObservabilityConfig.java
+│ │ │ │ // OTEL tracing/metrics/logging exporters, correlation IDs, log policy.
+│ │ │ ├── RagbotProperties.java
+│ │ │ │ // Chatbot-specific properties: voice, objective, chunkerConfig, chatLlm() alias, template names.
+│ │ │ ├── RagConfiguration.java
+│ │ │ │ // Example bean: LuceneSearchOperations (with embedding service, chunker config, index path).
+│ │ │ └── ChatConfiguration.java
+│ │ │ // Bean helper: AgentProcessChatbot.utilityFromPlatform(agentPlatform) for chatbots.
+│ │ │
+│ │ ├── api
+│ │ │ ├── grpc
+│ │ │ │ ├── AgenticRagGrpcImpl.java
+│ │ │ │ │ // Public mission API: submit/stream result progress/final output.
+│ │ │ │ ├── interceptors
+│ │ │ │ │ ├── GrpcAuthInterceptor.java
+│ │ │ │ │ ├── GrpcTracingInterceptor.java
+│ │ │ │ │ ├── GrpcMetricsInterceptor.java
+│ │ │ │ │ └── GrpcBudgetInterceptor.java
+│ │ │ │ │ // Boundary enforcement for auth/tracing/metrics/budget ceilings.
+│ │ │ │ └── policies
+│ │ │ │ └── AgentResiliencePolicy.java
+│ │ │ │ // Retries/CBs/timeouts/hedging for downstream domain/evidence calls.
+│ │ │ └── http
+│ │ │ ├── AdminController.java
+│ │ │ │ // Index health, backfills, policy diagnostics.
+│ │ │ └── EvalController.java
+│ │ │ // Internal test mission execution endpoints (RBAC-gated).
+│ │ │
+│ │ ├── mission
+│ │ │ ├── model
+│ │ │ │ ├── MissionRequest.java
+│ │ │ │ │ // User mission + attachments + explicit constraints/budgets.
+│ │ │ │ ├── MissionProgressEvent.java
+│ │ │ │ │ // Progress stream events for clients/UIs.
+│ │ │ │ ├── MissionResult.java
+│ │ │ │ │ // Ranked claim clusters, tweet clusters, author rankings, citations.
+│ │ │ │ └── MissionContext.java
+│ │ │ │ // Trace, tenant, budgets, policy decisions, temp artifact handles.
+│ │ │ │
+│ │ │ ├── MissionFlowCoordinator.java
+│ │ │ │ // Service-level orchestration around Embabel agent execution + post-processing.
+│ │ │ ├── MissionPathSelector.java
+│ │ │ │ // Chooses fast vs research path using SLA/budget constraints.
+│ │ │ └── MissionStage.java
+│ │ │ // Canonical stages (ingest → project → extract → dedupe → query → fetch → label → rank → synthesize).
+│ │ │
+│ │ ├── dice
+│ │ │ ├── ContextAssembler.java
+│ │ │ │ // Builds typed mission context from evidence snapshots + domain signals (versioned).
+│ │ │ ├── DomainBinder.java
+│ │ │ │ // Converts LLM outputs into typed commands/objects; rejects/repairs invalid structs.
+│ │ │ ├── GuardrailBinder.java
+│ │ │ │ // Enforces invariants: cite SourceRef, no invented metadata, no raw unprojected fields.
+│ │ │ └── projection
+│ │ │ ├── ProjectionContext.java
+│ │ │ │ // Alias dictionaries, locale/timezone rules, normalization knobs, version.
+│ │ │ ├── EvidenceProjection.java
+│ │ │ │ // Canonicalizes evidence doc + chunk metadata BEFORE any LLM-visible rendering.
+│ │ │ ├── MetadataNormalizer.java
+│ │ │ │ // Normalizes titles/authors/dates/model aliases/benchmark aliases (DICE projection layer).
+│ │ │ └── ContextProjection.java
+│ │ │ // Stable LLM prompt projections derived from projected metadata + models.
+│ │ │
+│ │ ├── agents
+│ │ │ ├── ToolishRag.java
+│ │ │ │ // Wrapper exposing fine-grained search tools to the LLM (agentic retrieval interface).
+│ │ │ ├── ClaimMiningAgent.java
+│ │ │ │ // Embabel @Agent/@EmbabelComponent for PDF claim extraction + dedupe flow.
+│ │ │ ├── SocialEvidenceAgent.java
+│ │ │ │ // Embabel component for targeted query generation + tweet/thread retrieval orchestration.
+│ │ │ ├── StanceAndRankingAgent.java
+│ │ │ │ // Embabel component for stance labeling, contradiction density, ranking.
+│ │ │ └── ReportSynthesisAgent.java
+│ │ │ // Embabel component for final response synthesis with caveats/citations.
+│ │ │
+│ │ ├── actions
+│ │ │ ├── dice
+│ │ │ │ └── ProjectEvidenceAction.java
+│ │ │ │ // Embabel @Action: runs EvidenceProjection so LLM never sees raw metadata.
+│ │ │ ├── evidence
+│ │ │ │ ├── ExtractClaimsAction.java
+│ │ │ │ │ // Embabel @Action: projected chunks → structured testable claims.
+│ │ │ │ ├── DedupeClaimsAction.java
+│ │ │ │ │ // Embabel @Action: merge claims into clusters with provenance retained.
+│ │ │ │ ├── ValidateClaimsAction.java
+│ │ │ │ │ // Embabel @Action: enforce {metric, benchmark, conditions, value}.
+│ │ │ │ └── BuildCitationsAction.java
+│ │ │ │ // Embabel @Action: assemble citation payload from SourceRef(s).
+│ │ │ │
+│ │ │ ├── social
+│ │ │ │ ├── BuildTargetedQueriesAction.java
+│ │ │ │ │ // Embabel @Action: claim cluster → aliases + benchmarks + critique keywords.
+│ │ │ │ ├── FetchTweetDiscussionsAction.java
+│ │ │ │ │ // Embabel @Action: retrieve tweets/threads/metadata under budget and authz.
+│ │ │ │ ├── ClusterTweetsByClaimAction.java
+│ │ │ │ │ // Embabel @Action: attach tweets/threads to claim clusters.
+│ │ │ │ └── RankAuthorsAction.java
+│ │ │ │ // Embabel @Action: credibility × insight-velocity × claim-relevance.
+│ │ │ │
+│ │ │ ├── analysis
+│ │ │ │ ├── LabelStanceAction.java
+│ │ │ │ │ // Embabel @Action: confirm/mismatch/contradict/unknown classification.
+│ │ │ │ ├── ComputeContradictionDensityAction.java
+│ │ │ │ │ // Embabel @Action: contradiction concentration per cluster.
+│ │ │ │ └── RankClaimClustersAction.java
+│ │ │ │ // Embabel @Action: impact × confidence × contradiction-density.
+│ │ │ │
+│ │ │ └── governance
+│ │ │ ├── VerifyProvenanceAction.java
+│ │ │ │ // Embabel @Action: reject floating citations / broken refs.
+│ │ │ └── RedactForOutputAction.java
+│ │ │ // Embabel @Action: redact sensitive content before response/audit.
+│ │ │
+│ │ ├── evidence
+│ │ │ ├── model
+│ │ │ │ ├── SourceRef.java
+│ │ │ │ │ // Canonical PDF pointer: doc/page/section/chunk offsets + hashes.
+│ │ │ │ ├── EvidenceChunk.java
+│ │ │ │ │ // Parsed text chunk + projected metadata + SourceRef + embedding key.
+│ │ │ │ ├── Claim.java
+│ │ │ │ │ // Structured testable claim fields + provenance refs.
+│ │ │ │ ├── ClaimCluster.java
+│ │ │ │ │ // Canonical claim + duplicates/variants + supporting refs.
+│ │ │ │ └── ClaimClusterScore.java
+│ │ │ │ // impact/confidence/contradiction-density score + reasoning.
+│ │ │ │
+│ │ │ ├── ingest
+│ │ │ │ ├── pipeline
+│ │ │ │ │ ├── IngestionScheduler.java
+│ │ │ │ │ ├── FetchJobWorker.java
+│ │ │ │ │ └── IndexEvidencePipeline.java
+│ │ │ │ │ // Parse → chunk → project(DICE) → classify → embed → index.
+│ │ │ │ ├── connectors
+│ │ │ │ │ ├── PdfFetcher.java
+│ │ │ │ │ ├── PdfParser.java
+│ │ │ │ │ └── TikaHierarchicalContentReader.java
+│ │ │ │ │ // Uses Apache Tika for hierarchical extraction (titles/sections/paragraphs).
+│ │ │ │ └── transform
+│ │ │ │ ├── DoclingPreprocessor.java
+│ │ │ │ │ // Optional preprocessor to convert messy PDFs → clean markdown before ingest.
+│ │ │ │ ├── SectionClassifier.java
+│ │ │ │ │ // Results/methods/limitations tags to improve retrieval and caveats.
+│ │ │ │ ├── ClaimCanonicalizer.java
+│ │ │ │ ├── ProvenanceBuilder.java
+│ │ │ │ └── PrivacyRedactionService.java
+│ │ │ │
+│ │ │ ├── extract
+│ │ │ │ ├── ClaimExtractor.java
+│ │ │ │ │ // Underlying service used by ExtractClaimsAction (structured output + validation).
+│ │ │ │ ├── ClaimDedupe.java
+│ │ │ │ ├── ClaimValidator.java
+│ │ │ │ └── ClaimClusterExplainer.java
+│ │ │ │ // Merge rationale for audits/debugging.
+│ │ │ │
+│ │ │ └── store
+│ │ │ ├── EvidenceIndex.java
+│ │ │ │ // Facade over ES/Milvus/local exact index.
+│ │ │ ├── EvidenceStore.java
+│ │ │ │ // Evidence-only artifact/chunk/provenance storage.
+│ │ │ ├── ClaimStore.java
+│ │ │ │ // Claim + cluster storage; not domain truth.
+│ │ │ └── ClaimIndexAdapter.java
+│ │ │ // Canonical claim lookup for dedupe/cross-doc linking.
+│ │ │
+│ │ ├── social
+│ │ │ ├── model
+│ │ │ │ ├── TweetDoc.java
+│ │ │ │ ├── TweetCluster.java
+│ │ │ │ ├── StanceLabel.java
+│ │ │ │ └── AuthorScore.java
+│ │ │ │ // Core social evidence/result models.
+│ │ │ │
+│ │ │ ├── query
+│ │ │ │ ├── TargetedQueryBuilder.java
+│ │ │ │ └── QueryTemplates.java
+│ │ │ │ // Alias + critique keyword generation for claims.
+│ │ │ │
+│ │ │ ├── fetch
+│ │ │ │ ├── TweetRetrievalPort.java
+│ │ │ │ │ // Typed read contract for tweets/threads/metadata.
+│ │ │ │ ├── TweetThreadHydrator.java
+│ │ │ │ └── AuthorSignalsPort.java
+│ │ │ │ // Credibility/expertise/activity features.
+│ │ │ │
+│ │ │ └── cluster
+│ │ │ ├── TweetClusterer.java
+│ │ │ └── ThreadDeduper.java
+│ │ │ // Group and dedupe tweet discussions per claim.
+│ │ │
+│ │ ├── analysis
+│ │ │ ├── StanceClassifier.java
+│ │ │ │ // Underlying classifier used by LabelStanceAction.
+│ │ │ ├── ContradictionDensity.java
+│ │ │ ├── ImpactScorer.java
+│ │ │ ├── AuthorRanker.java
+│ │ │ └── ResultSynthesizer.java
+│ │ │ // Final synthesis services used by agents/actions.
+│ │ │
+│ │ ├── governance
+│ │ │ ├── CitationAssembler.java
+│ │ │ │ // Every claim cluster must map back to SourceRef(s).
+│ │ │ ├── ProvenanceVerifier.java
+│ │ │ ├── AuditTrailService.java
+│ │ │ └── Redaction.java
+│ │ │ // Enterprise guarantees stay here, not in agent runtime internals.
+│ │ │
+│ │ ├── policy
+│ │ │ ├── BudgetPolicy.java
+│ │ │ ├── ToolAuthzPolicy.java
+│ │ │ ├── DataHandlingPolicy.java
+│ │ │ ├── SafetyPolicy.java
+│ │ │ ├── CompliancePolicy.java
+│ │ │ └── AgreementPolicy.java
+│ │ │ // Deterministic rules that wrap/limit agent behavior.
+│ │ │
+│ │ ├── adapters
+│ │ │ ├── sparrowxgrpc
+│ │ │ │ ├── TweetGrpcClient.java
+│ │ │ │ ├── SearchGrpcClient.java
+│ │ │ │ ├── ProfileGrpcClient.java
+│ │ │ │ └── TrendsGrpcClient.java
+│ │ │ │ // Typed domain reads; domain truth lives in Sparrowx services.
+│ │ │ ├── evidence
+│ │ │ │ ├── ElasticEvidenceAdapter.java
+│ │ │ │ ├── VectorEvidenceAdapter.java
+│ │ │ │ ├── LocalDocIndexAdapter.java
+│ │ │ │ ├── LuceneEvidenceAdapter.java
+│ │ │ │ │ // LuceneSearchOperations implementation exposing text+vector tools.
+│ │ │ │ └── Neo4jEvidenceAdapter.java
+│ │ │ │ // Neo4j adapter (graph + vector index) for entity/document-structure navigation.
+│ │ │ └── storage
+│ │ │ └── MinioEvidenceBlobStore.java
+│ │ │ // Raw PDFs/chunks as artifacts (evidence-only).
+│ │ │
+│ │ ├── prompts
+│ │ │ ├── PromptPack.java
+│ │ │ │ // Loads/composes prompts by task/version; uses ContextProjection outputs only.
+│ │ │ ├── PromptVersions.java
+│ │ │ └── StructuredOutputSchemas.java
+│ │ │ // Claim/Cluster/Stance/Ranking JSON schema definitions.
+│ │ │ └── templates/
+│ │ │ ├── claim_extraction.jinja
+│ │ │ ├── claim_dedupe.jinja
+│ │ │ ├── targeted_query_gen.jinja
+│ │ │ ├── tweet_stance_labeling.jinja
+│ │ │ ├── author_scoring.jinja
+│ │ │ └── synthesis.jinja
+│ │ │ // Jinja templates and reusable elements (guardrails, personas, objectives).
+│ │ │
+│ │ ├── validation
+│ │ │ ├── SchemaValidator.java
+│ │ │ ├── OutputRepair.java
+│ │ │ └── HallucinationGuard.java
+│ │ │ // Thin validation boundary; reject unprojected metadata or uncited claims.
+│ │ │
+│ │ ├── mcp
+│ │ │ ├── McpToolGateway.java
+│ │ │ └── McpToolPolicyAdapter.java
+│ │ │ // Optional external tools treated as evidence tools only.
+│ │ │
+│ │ ├── exception
+│ │ │ ├── MissionExecutionException.java
+│ │ │ ├── PolicyViolationException.java
+│ │ │ ├── EvidenceProcessingException.java
+│ │ │ └── ValidationException.java
+│ │ │
+│ │ └── util
+│ │ ├── Jsons.java
+│ │ ├── RetryPolicies.java
+│ │ ├── Concurrency.java
+│ │ └── Timeouts.java
+│ │ // Thin helpers only.
+│ │
+│ └── resources
+│ ├── application.yml
+│ │ # endpoints, security, budgets, tool permissions, OTEL exporters, retention, feature flags.
+│ ├── application-dev.yml
+│ │ # local creds, mocks, lower limits, verbose tracing.
+│ ├── prompts
+│ │ ├── claim_extraction.jinja
+│ │ ├── claim_dedupe.jinja
+│ │ ├── targeted_query_gen.jinja
+│ │ ├── tweet_stance_labeling.jinja
+│ │ ├── author_scoring.jinja
+│ │ └── synthesis.jinja
+│ ├── grpc
+│ │ └── agentic_rag.proto.config.json
+│ │ # Method deadlines/retries/budgets/backpressure hints.
+│ └── proto
+│ └── agentic_rag.proto
+│ // Mission API contract: progress stream + ranked outputs + citations.
+│
+└── test
+├── java/com/sparrowx/agenticrag
+│ ├── dice
+│ │ ├── EvidenceProjectionTest.java
+│ │ ├── MetadataNormalizerTest.java
+│ │ └── GuardrailBinderTest.java
+│ │ // Ensures no unprojected metadata can reach prompts/LLM.
+│ ├── agents
+│ │ ├── ClaimMiningAgentTest.java
+│ │ ├── SocialEvidenceAgentTest.java
+│ │ ├── StanceAndRankingAgentTest.java
+│ │ └── ReportSynthesisAgentTest.java
+│ │ // Embabel component behavior tests with mocks/fixtures.
+│ ├── actions
+│ │ ├── ProjectEvidenceActionTest.java
+│ │ ├── ExtractClaimsActionTest.java
+│ │ ├── DedupeClaimsActionTest.java
+│ │ ├── FetchTweetDiscussionsActionTest.java
+│ │ ├── LabelStanceActionTest.java
+│ │ └── RankClaimClustersActionTest.java
+│ │ // Deterministic action-level tests.
+│ ├── evidence
+│ │ ├── SectionClassifierTest.java
+│ │ ├── ProvenanceBuilderTest.java
+│ │ └── ClaimValidatorTest.java
+│ ├── governance
+│ │ ├── CitationAssemblerTest.java
+│ │ ├── ProvenanceVerifierTest.java
+│ │ └── HallucinationGuardTest.java
+│ ├── api
+│ │ ├── GrpcInterceptorsTest.java
+│ │ └── AgentResiliencePolicyTest.java
+│ └── integration
+│ └── EndToEndClaimToTweetRankingTest.java
+│ // PDFs → project(DICE) → claims/clusters → queries → tweets → stance → ranking + citations.
+└── resources
+├── fixtures
+│ ├── pdfs/
+│ │ ├── gpt5_system_card_sample.pdf
+│ │ ├── routed_llm_stress_eval_sample.pdf
+│ │ └── preparedness_framework_v2_sample.pdf
+│ ├── tweets/
+│ │ ├── threads_sample.json
+│ │ └── author_signals_sample.json
+│ └── claims/
+│ └── expected_claim_clusters.json
+└── prompts
+└── sample_mission.txt
+// Canonical mission fixture for regression tests.
