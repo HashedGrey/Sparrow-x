@@ -1,125 +1,206 @@
 # Agentic RAG Service
 
-This service implements **Agentic, multi-hop Retrieval-Augmented Generation (RAG)** for **SparrowX**.
+This service implements **high-fidelity, multi-hop Retrieval-Augmented Generation (RAG)** for **SparrowX**.  
+It is built on the **Embabel agentic framework** to execute complex analytical missions that require:
 
-At present, the repository contains **structure without implementation**.  
-This is intentional since the coding approach is top-down
+- Cross-document reasoning
+- Social evidence synthesis
+- Strict provenance guarantees
+---
+## Core Philosophy
+Unlike standard *"chat-over-PDF"* wrappers, this system treats RAG as a **structured pipeline of discrete, verifiable actions**.
 
-The purpose of this repo is to make the **reasoning architecture explicit before code exists**.
+### Mission-Oriented
+Optimized for **missions** (long-running research or execution tasks) rather than simple Q&A.
 
-If you want to understand how complex analytical missions are decomposed, routed, verified, and synthesized, start with:
+### DICE Architecture
+Uses a **Data → Intent → Context → Evidence (DICE)** model to ensure the LLM only interacts with **projected, normalized metadata**.
 
-➡ **`agentic-tree.txt`**
+### Evidence-First
+Hallucinations are mitigated **by construction**. Agents are restricted to tools that operate on **verified evidence stores**.
 
-That file is an ASCII execution map designed to be fed directly into an LLM.
+### Deterministic Governance
+Budgets, safety policies, and provenance checks are **enforced by the platform**, not the LLM.
 
 ---
 
-## What This Service Is (and Is Not)
+## Technical Stack
 
-### It **is**
-- A **mission-oriented agentic system**
-- Designed for **high-stakes, multi-document analysis**
-- Deterministic where it must be, probabilistic where it is safe
-- Evidence-first, citation-required, provenance-aware
-
-### It **is not**
-- A chat wrapper
-- A “single-hop RAG search”
-- A place where LLMs invent domain truth
-- A memory store for user facts or opinions
+| Layer | Technology                                                                                    |
+|---|-----------------------------------------------------------------------------------------------|
+| Framework | Spring Boot + Embabel Agent Runtime                                                           |
+| Communication | gRPC (Mission API) + HTTP (Admin/Eval)                                                        |
+| Storage | Elasticsearch (Lexical), CassandraDb(Hydration), Milvus (Vector), Neo4j (Graph), MinIO (Blob) |
+| Observability | OpenTelemetry (OTEL) + Prometheus                                                             |
 
 ---
 
-## Example Mission This System Is Built To Execute
+# The Execution Pipeline
+At present, the repository contains **structure without implementation**, which is intentional since the coding approach is top-down.
+The purpose of this is to make the **reasoning architecture explicit before code exists**.
 
-> **Given the following PDFs:**
-> - GPT-5 System Card
-> - Stanford Research PDF — *Routed LLM Systems Under Stress*
-> - Preparedness Framework v2
->
-> **Extract and dedupe all testable claims**  
-> `{metric, benchmark, conditions, value}`
->
-> For each claim cluster:
-> - Generate targeted retrieval queries
-> - Retrieve relevant tweet discussions (full threads + metadata)
-> - Classify evidence as `confirm / mismatch / contradict / unknown`
->
-> Rank:
-> - Claim clusters by `impact × confidence × contradiction-density`
-> - Authors by `credibility × insight-velocity × claim-relevance`
->
-> Provide citations back to the exact PDF sections.
-
-This README explains **how that mission executes**, step by step.
-
----
+If you want to understand how complex analytical missions are decomposed, routed, verified and synthesized:
 
 ## Start Here: `agentic-tree.txt`
+The file is an ASCII File Directory tree that functions as an execution map designed to be fed directly into an LLM.
 
-`agentic-tree.txt` is the **authoritative mental model** of the system.
-
-It shows:
+This is the **authoritative mental model** of the system which shows:
 - Agent boundaries
 - Deterministic vs LLM-driven steps
 - Evidence-only memory rules
 - Domain-read vs evidence-retrieval separation
-- Validation, policy, and budget gates
+- Validation, policy and budget gates
 - Where hallucination is impossible by construction
 
 ### How to Use It
 
 Paste the file into an LLM and ask:
-
 ```text
-Explain how this agentic system executes a multi-hop RAG mission,
+Explain how this agentic system executes a complex multi-hop RAG mission,
 including planning, evidence verification, and synthesis.
 ````
-## Core Execution Model
+---
 
-### Every mission follows the same non-negotiable lifecycle:
+---
+Every mission follows a canonical lifecycle managed by the **MissionFlowCoordinator**.
 
-Intent  
-→ Typed Canonical Command  
-→ DICE Context Bind  
-→ PlanGraph (DAG)  
-→ Domain Reads (LIVE sp state)  
-→ Policy & Budget Gates  
-→ Evidence Retrieval (docs, tweets, PDFs)  
-→ Claim Extraction & Cross-checking  
-→ Validation (schemas + provenance)  
-→ Synthesis (citations required)  
+### 1. Ingest & Project
+Raw **PDFs / Tweets** are parsed and chunked.
 
-### Execution Flow Across Files
+The **DICE projection layer** normalizes metadata such as:
 
-Below is the concrete walkthrough of the repository that implements the lifecycle above.
-Think of it as: request enters, plan is built, gates are enforced, evidence is gathered, answer is synthesized.
+- { titles ,authors ,dates ,sources }
 
-- grpc/server/AgenticServiceGrpcImpl.java
-Entry point for a mission request. Starts tracing/budgets, streams progress events, hands off to the engine.
+This ensures the **LLM never sees raw document headers or messy metadata**.
 
-- engine/AgentEngine.java
-Mission lifecycle coordinator:   
-Intent → DICE bind → PlanGraph → Execute → Synthesize.
+---
 
-- planning/IntentResolver.java → planning/Planner.java → planning/PlanGraph.java
-Turns user mission into a typed intent, then produces a deterministic Plan DAG (optionally via GOAP plugin).
+### 2. Claim Extraction
 
-- dice/ContextAssembler.java (+ ConstraintBinder, GuardrailBinder)
-Builds versioned mission context from LIVE sp domain reads + evidence summaries; injects budgets and invariants.
+The **ClaimMiningAgent** extracts structured, testable claims:
+- {
+  metric,
+  benchmark,
+  conditions,
+  value
+  }
 
-- actions/* executed by engine/PlanExecutor.java
-Executes nodes in-order (or explicit parallel), enforcing retries/budgets/policy:
+This converts narrative text into **machine-analyzable claims**.
 
-- Domain reads: actions/domain/* via gRPC adapters
+---
 
-- Evidence: actions/evidence/* via ES/Milvus/local index
+### 3. Deduplication
 
-- Enforcement: actions/enforcement/* gates
+Claims across multiple documents are merged into **ClaimClusters**.
 
-- engine/EvidenceCollector.java + governance/ProvenanceVerifier.java
-Ensures every EvidenceItem has a complete provenance chain; rejects “floating” claims.
+Each cluster:
 
-- engine/ResultSynthesizer.java
-Produces the final response: combines domain facts + cited evidence, emits confidence + rationale.
+- groups semantically equivalent claims
+- retains **full provenance** to original sources.
+
+---
+
+### 4. Social Discovery
+
+The **SocialEvidenceAgent** generates targeted queries to retrieve real-world discussion signals:
+
+- Tweets
+- Threads
+- Public commentary
+
+This adds **external social validation or contradiction** to academic or formal claims.
+
+---
+
+### 5. Analysis & Stance
+
+The **StanceAndRankingAgent** labels evidence as:
+
+- **confirm**
+- **mismatch**
+- **contradict**
+
+Claim clusters are ranked based on **contradiction density**, surfacing the most controversial or debated claims first.
+
+---
+
+### 6. Synthesis
+
+The **ReportSynthesisAgent** generates the final analytical report.
+
+Outputs include:
+
+- mandatory citations
+- caveats
+- claim-level provenance
+- structured reasoning summaries
+
+---
+
+# Repository Map
+
+## 1. Mission Entry Point
+
+**api/grpc/AgenticRagGrpcImpl.java**
+
+Primary interface for:
+
+- submitting missions
+- streaming mission progress events
+
+**mission/MissionFlowCoordinator.java**
+
+Orchestrates transitions between **MissionStages** in the pipeline.
+
+---
+
+## 2. The DICE Layer (Guardrails)
+
+**dice/projection/EvidenceProjection.java**
+
+Canonicalizes metadata so the **LLM never sees raw, messy document headers**.
+
+**dice/GuardrailBinder.java**
+
+Ensures every generated output maps back to a **valid SourceRef**.
+
+---
+
+## 3. Agent & Action Definitions
+
+**agents/**  
+Contains Embabel `@Agent` components such as:
+
+- `ClaimMiningAgent`
+- `SocialEvidenceAgent`
+- `StanceAndRankingAgent`
+- `ReportSynthesisAgent`
+
+**actions/**  
+Contains atomic, reusable work units executed by agents:
+
+- `ExtractClaimsAction`
+- `LabelStanceAction`
+- other deterministic actions
+
+---
+
+## 4. Governance & Policy
+
+**policy/**
+
+Defines deterministic platform rules:
+
+- `BudgetPolicy`
+- `SafetyPolicy`
+- `ToolAuthz`
+
+These policies enforce **execution constraints independent of the LLM**.
+
+---
+
+**governance/ProvenanceVerifier.java**
+
+Rejects any **floating citations** that cannot be traced to a specific **PDF chunk or document fragment**.
+
+This guarantees **verifiable provenance for every claim in the final report**.
