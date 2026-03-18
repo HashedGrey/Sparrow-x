@@ -1,0 +1,52 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  cassandra:
+    keyspace-name: sparrowx
+    contact-points: localhost
+    port: 9042
+    schema-action: NONE
+    local-datacenter: datacenter1
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: tweet-service
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
+
+
+
+  otel:
+    exporter:
+      otlp:
+        endpoint: alloy:4317
+
+    resource:
+      attributes:
+        service.name: tweet-service
+        service.version: 1.0.0
+        service.namespace: sparrowx
+        deployment.environment: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+  metrics:
+    tags:
+      service: tweet-service

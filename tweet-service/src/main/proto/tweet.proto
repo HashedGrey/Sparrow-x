@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package tweet;
+
+option java_multiple_files = true;
+option java_package = "com.sparrowx.tweet.grpc";
+option java_outer_classname = "TweetProto";
+
+import "google/protobuf/timestamp.proto";
+
+/*
+ Tweet Service
+ Core read/write API for Tweet domain
+*/
+service TweetService {
+
+  // Create a new tweet
+  rpc CreateTweet(CreateTweetRequest) returns (CreateTweetResponse);
+
+  // Get a single tweet by id
+  rpc GetTweet(GetTweetRequest) returns (GetTweetResponse);
+
+  // Fetch multiple tweets (used by timeline / batch reads)
+  rpc GetBatchTweets(GetBatchTweetsRequest) returns (GetBatchTweetsResponse);
+}
+
+
+/*
+========================
+Create Tweet
+========================
+*/
+
+message CreateTweetRequest {
+  string user_id = 1;
+  string content = 2;
+}
+
+message CreateTweetResponse {
+  string tweet_id = 1;
+  string user_id = 2;
+  string content = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+
+/*
+========================
+Get Tweet
+========================
+*/
+
+message GetTweetRequest {
+  string tweet_id = 1;
+}
+
+message GetTweetResponse {
+  string tweet_id = 1;
+  string user_id = 2;
+  string content = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+
+/*
+========================
+Batch Tweets
+========================
+*/
+
+message GetBatchTweetsRequest {
+  repeated string tweet_ids = 1;
+}
+
+message GetBatchTweetsResponse {
+  repeated Tweet tweets = 1;
+}
+
+
+/*
+========================
+Shared Models
+========================
+*/
+
+message Tweet {
+  string tweet_id = 1;
+  string user_id = 2;
+  string content = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
