@@ -14,7 +14,7 @@ Unlike standard *"chat-over-PDF"* wrappers, this system treats RAG as a **struct
 Optimized for **missions** (long-running research or execution tasks) rather than simple Q&A.
 
 ### DICE Architecture
-Uses a **Data → Intent → Context → Evidence (DICE)** model to ensure the LLM only interacts with **projected, normalized metadata**.
+Uses a **Domain-Integrated Context Engineering** model to ensure the LLM only interacts with **projected, normalized metadata**.
 
 ### Evidence-First
 Hallucinations are mitigated **by construction**. Agents are restricted to tools that operate on **verified evidence stores**.
