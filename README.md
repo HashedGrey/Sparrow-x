@@ -49,7 +49,7 @@ to the RAG layer, allowing the agentic service to operate across multiple enterp
 >#### Pharmaceutical, biotech, and hospital research networks.
 
 ## Goals Of This Project
-- 🔹 Using Agentic Context Engineering powered by Embabel: The system decomposes a user goal into retrieval and reasoning actions, dynamically combining hyper-search over tweets, relationship-aware lookups, and vector-based semantic recall; all expressed through natural-language intent rather than fixed queries. 
+- 🔹 Using Agentic Context Engineering: The system decomposes a user goal into retrieval and reasoning actions, dynamically combining hyper-search over tweets, relationship-aware lookups, and vector-based semantic recall; all expressed through natural-language intent rather than fixed queries. 
     i.e. Goal → Observe signals → Expand context → Validate evidence → Synthesize output
 - 🔹 Using Vertical Slice Architecture for architecture level.
 - 🔹 Using Spring MVC as a Web Framework.
