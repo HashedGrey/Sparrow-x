@@ -13,28 +13,53 @@ import java.util.Set;
 @Setter
 @SuperBuilder
 public class AuthContext {
+
+    private static final ThreadLocal<AuthContext> CURRENT = new ThreadLocal<>();
+
     private String userId;
     private String tenantId;
 
-    @Setter(AccessLevel.NONE) // roles can’t be set directly; use addRole/removeRole
+    @Setter(AccessLevel.NONE)
     private final Set<String> roles = new HashSet<>();
 
-    // Add a role
+    // ===== Context lifecycle =====
+
+    public static void set(AuthContext context) {
+        CURRENT.set(context);
+    }
+
+    public static AuthContext get() {
+        return CURRENT.get();
+    }
+
+    public static void clear() {
+        CURRENT.remove();
+    }
+
+    public static String getCurrentUserId() {
+        AuthContext ctx = CURRENT.get();
+        return ctx != null ? ctx.getUserId() : null;
+    }
+
+    public static String getCurrentTenantId() {
+        AuthContext ctx = CURRENT.get();
+        return ctx != null ? ctx.getTenantId() : null;
+    }
+
+    // ===== Roles =====
+
     public void addRole(String role) {
         if (role != null) roles.add(role);
     }
 
-    // Remove a role
     public void removeRole(String role) {
         roles.remove(role);
     }
 
-    // Check if user has a role
     public boolean hasRole(String role) {
         return roles.contains(role);
     }
 
-    // Return unmodifiable view
     public Set<String> getRoles() {
         return Collections.unmodifiableSet(roles);
     }
