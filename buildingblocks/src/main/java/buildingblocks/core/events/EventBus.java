@@ -1,4 +1,5 @@
 package buildingblocks.core.events;
 
-public class EventBus {
+public interface EventBus {
+    void publish(DomainEvent event);
 }

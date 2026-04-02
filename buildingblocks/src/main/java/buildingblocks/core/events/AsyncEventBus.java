@@ -1,4 +1,5 @@
 package buildingblocks.core.events;
 
-public class AsyncEventBus {
+public interface AsyncEventBus {
+    void publishAsync(DomainEvent event);
 }

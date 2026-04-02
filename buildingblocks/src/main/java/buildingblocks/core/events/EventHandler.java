@@ -1,4 +1,5 @@
 package buildingblocks.core.events;
 
-public class EventHandler {
+public interface EventHandler<E extends DomainEvent> {
+    void handle(E event);
 }
