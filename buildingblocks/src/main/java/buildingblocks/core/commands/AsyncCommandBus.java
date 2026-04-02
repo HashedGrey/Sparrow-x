@@ -1,5 +1,7 @@
-//package buildingblocks1.core.commands;
-//
-//public interface AsyncCommandBus {
-//    void publish(Command command);
-//}
+package buildingblocks.core.commands;
+
+import java.util.concurrent.CompletableFuture;
+
+public interface AsyncCommandBus {
+    <R> CompletableFuture<R> dispatchAsync(Command<R> command);
+}

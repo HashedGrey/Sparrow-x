@@ -1,6 +1,7 @@
-//package buildingblocks1.core.commands;
-//
-//public interface CommandBus {
-//    <TResponse> TResponse send(Command<TResponse> command);
-//
-//}
+package buildingblocks.core.commands;
+
+public interface CommandBus {
+    <R> R dispatch(Command<R> command);
+
+}
+

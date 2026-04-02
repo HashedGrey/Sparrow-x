@@ -1,8 +1,5 @@
-//package buildingblocks1.core.commands;
-//
-//import buildingblocks.mediator.abstractions.commands.ICommand;
-//import buildingblocks.mediator.abstractions.requests.IRequestHandler;
-//
-//public interface CommandHandler<TCommand extends ICommand<TResponse>, TResponse> {
-//    TResponse handle(TCommand command);
-//}
+package buildingblocks.core.commands;
+
+public interface CommandHandler<TCommand extends Command<R>, R> {
+    R handle(TCommand command);
+}

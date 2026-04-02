@@ -1,4 +1,4 @@
-//package buildingblocks1.core.commands;
-//
-//public interface Command<TResponse> {
-//}
+package buildingblocks.core.commands;
+
+public interface Command<R> {
+}
