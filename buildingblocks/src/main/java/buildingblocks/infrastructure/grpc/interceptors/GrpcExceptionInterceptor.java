@@ -2,9 +2,11 @@ package buildingblocks.infrastructure.grpc.interceptors;
 
 import buildingblocks.shared.exceptions.*;
 import io.grpc.*;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@Component
 public class GrpcExceptionInterceptor implements ServerInterceptor {
 
     @Override
@@ -13,69 +15,112 @@ public class GrpcExceptionInterceptor implements ServerInterceptor {
             Metadata headers,
             ServerCallHandler<ReqT, RespT> next) {
 
-        ServerCall<ReqT, RespT> wrappedCall = new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
+        ServerCall<ReqT, RespT> wrappedCall =
+                new ForwardingServerCall.SimpleForwardingServerCall<>(call) {};
+
+        ServerCall.Listener<ReqT> listener = next.startCall(wrappedCall, headers);
+
+        return new ForwardingServerCallListener
+                .SimpleForwardingServerCallListener<>(listener) {
+
             @Override
-            public void close(Status status, Metadata trailers) {
-                super.close(status, trailers);
+            public void onMessage(ReqT message) {
+                try {
+                    super.onMessage(message);
+                } catch (Throwable ex) {
+                    closeWithException(wrappedCall, ex);
+                }
+            }
+
+            @Override
+            public void onHalfClose() {
+                try {
+                    super.onHalfClose();
+                } catch (Throwable ex) {
+                    closeWithException(wrappedCall, ex);
+                }
             }
         };
-
-        try {
-            return next.startCall(wrappedCall, headers);
-        } catch (Exception ex) {
-            StatusWithBody statusWithBody = mapExceptionToStatus(ex);
-            wrappedCall.close(statusWithBody.getStatus(), new Metadata());
-            return new ServerCall.Listener<>() {
-            }; // noop listener
-        }
-
     }
 
-    private StatusWithBody mapExceptionToStatus(Exception ex) {
+    private void closeWithException(ServerCall<?, ?> call, Throwable ex) {
+
+        StatusWithBody statusWithBody = mapExceptionToStatus(ex);
+
+        call.close(statusWithBody.getStatus(), new Metadata());
+    }
+
+    private StatusWithBody mapExceptionToStatus(Throwable ex) {
+
         if (ex instanceof BadRequestException badRequest) {
             return new StatusWithBody(
-                    Status.INVALID_ARGUMENT.withDescription(badRequest.getMessage()).withCause(badRequest),
+                    Status.INVALID_ARGUMENT
+                            .withDescription(badRequest.getMessage())
+                            .withCause(badRequest),
                     badRequest.getErrorMessages()
             );
-        } else if (ex instanceof NotFoundException notFound) {
+        }
+
+        if (ex instanceof NotFoundException notFound) {
             return new StatusWithBody(
-                    Status.NOT_FOUND.withDescription(notFound.getMessage()).withCause(notFound),
+                    Status.NOT_FOUND
+                            .withDescription(notFound.getMessage())
+                            .withCause(notFound),
                     List.of(notFound.getMessage())
             );
-        } else if (ex instanceof ConflictException conflict) {
+        }
+
+        if (ex instanceof ConflictException conflict) {
             return new StatusWithBody(
-                    Status.ALREADY_EXISTS.withDescription(conflict.getMessage()).withCause(conflict),
+                    Status.ALREADY_EXISTS
+                            .withDescription(conflict.getMessage())
+                            .withCause(conflict),
                     List.of(conflict.getMessage())
             );
-        } else if (ex instanceof UnauthorizedException unauthorized) {
+        }
+
+        if (ex instanceof UnauthorizedException unauthorized) {
             return new StatusWithBody(
-                    Status.UNAUTHENTICATED.withDescription(unauthorized.getMessage()).withCause(unauthorized),
+                    Status.UNAUTHENTICATED
+                            .withDescription(unauthorized.getMessage())
+                            .withCause(unauthorized),
                     List.of(unauthorized.getMessage())
             );
-        } else if (ex instanceof ForbiddenException forbidden) {
+        }
+
+        if (ex instanceof ForbiddenException forbidden) {
             return new StatusWithBody(
-                    Status.PERMISSION_DENIED.withDescription(forbidden.getMessage()).withCause(forbidden),
+                    Status.PERMISSION_DENIED
+                            .withDescription(forbidden.getMessage())
+                            .withCause(forbidden),
                     List.of(forbidden.getMessage())
             );
-        } else {
-            if (ex instanceof AppException appEx) {
-                return new StatusWithBody(
-                        Status.FAILED_PRECONDITION.withDescription(appEx.getMessage()).withCause(appEx),
-                        List.of(appEx.getMessage())
-                );
-            } else if (ex instanceof InternalServerException internal) {
-                return new StatusWithBody(
-                        Status.INTERNAL.withDescription(internal.getMessage()).withCause(internal),
-                        List.of(internal.getMessage())
-                );
-            }
+        }
+
+        if (ex instanceof AppException appEx) {
+            return new StatusWithBody(
+                    Status.FAILED_PRECONDITION
+                            .withDescription(appEx.getMessage())
+                            .withCause(appEx),
+                    List.of(appEx.getMessage())
+            );
+        }
+
+        if (ex instanceof InternalServerException internal) {
+            return new StatusWithBody(
+                    Status.INTERNAL
+                            .withDescription(internal.getMessage())
+                            .withCause(internal),
+                    List.of(internal.getMessage())
+            );
         }
 
         // fallback
         return new StatusWithBody(
-                Status.UNKNOWN.withDescription(ex.getMessage()).withCause(ex),
+                Status.UNKNOWN
+                        .withDescription(ex.getMessage())
+                        .withCause(ex),
                 List.of(ex.getMessage())
         );
     }
-
 }

@@ -2,18 +2,24 @@ package buildingblocks.infrastructure.grpc.interceptors;
 
 import buildingblocks.infrastructure.observability.GrpcTracingPropagator;
 import io.grpc.*;
-import io.opentelemetry.api.GlobalOpenTelemetry;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanKind;
-import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.*;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class GrpcTracingInterceptor implements ServerInterceptor {
 
-    private final Tracer tracer = GlobalOpenTelemetry.getTracer("sparrowx-grpc");
+    private final Tracer tracer;
+
+    public GrpcTracingInterceptor(Tracer tracer) {
+        this.tracer = tracer;
+    }
+    private static final Logger logger =
+            LoggerFactory.getLogger(GrpcTracingInterceptor.class);
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -21,39 +27,83 @@ public class GrpcTracingInterceptor implements ServerInterceptor {
             Metadata headers,
             ServerCallHandler<ReqT, RespT> next) {
 
-        String methodName = call.getMethodDescriptor().getFullMethodName();
+        String method = call.getMethodDescriptor().getFullMethodName();
 
-        // Extract parent context from upstream (Linkerd or other service)
+        // Extract upstream trace context (gateway or other service)
         Context parentContext = GrpcTracingPropagator.extractContext(headers);
 
-        // Start the server span
-        Span span = tracer.spanBuilder(methodName)
+        Span span = tracer.spanBuilder(method)
                 .setSpanKind(SpanKind.SERVER)
                 .setParent(parentContext)
                 .startSpan();
+        logger.info("trace.start: {}", span.getSpanContext().getTraceId());
 
-        // Standard span attributes
-        span.setAttribute("rpc.system", "grpc");
-        span.setAttribute("rpc.method", methodName);
+        Context context = parentContext.with(span);
 
-        // Make span current for downstream calls
-        Scope scope = parentContext.with(span).makeCurrent();
+        ServerCall<ReqT, RespT> tracingCall =
+                new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
 
-        // Wrap the ServerCall to end span when call closes
-        ServerCall<ReqT, RespT> tracingCall = new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
+                    @Override
+                    public void close(Status status, Metadata trailers) {
+
+                        if (!status.isOk()) {
+                            span.recordException(status.asRuntimeException());
+                        }
+
+                        span.setAttribute("rpc.system", "grpc");
+                        span.setAttribute("rpc.method", method);
+                        span.setAttribute("rpc.grpc.status_code", status.getCode().name());
+
+                        span.end();
+
+                        super.close(status, trailers);
+                    }
+                };
+
+        ServerCall.Listener<ReqT> listener;
+
+        // activate span for service logic
+        try (Scope scope = context.makeCurrent()) {
+            listener = next.startCall(tracingCall, headers);
+        }
+
+        return new ForwardingServerCallListener
+                .SimpleForwardingServerCallListener<>(listener) {
+
             @Override
-            public void close(Status status, Metadata trailers) {
-                if (!status.isOk()) {
-                    span.recordException(status.asRuntimeException());
+            public void onMessage(ReqT message) {
+                try (Scope scope = context.makeCurrent()) {
+                    super.onMessage(message);
                 }
-                span.setAttribute("rpc.grpc.status_code", status.getCode().name());
-                span.end();
-                scope.close();
-                super.close(status, trailers);
+            }
+
+            @Override
+            public void onHalfClose() {
+                try (Scope scope = context.makeCurrent()) {
+                    super.onHalfClose();
+                }
+            }
+
+            @Override
+            public void onCancel() {
+                try (Scope scope = context.makeCurrent()) {
+                    super.onCancel();
+                }
+            }
+
+            @Override
+            public void onComplete() {
+                try (Scope scope = context.makeCurrent()) {
+                    super.onComplete();
+                }
+            }
+
+            @Override
+            public void onReady() {
+                try (Scope scope = context.makeCurrent()) {
+                    super.onReady();
+                }
             }
         };
-
-        // Proceed with the call using the wrapped ServerCall
-        return next.startCall(tracingCall, headers);
     }
 }

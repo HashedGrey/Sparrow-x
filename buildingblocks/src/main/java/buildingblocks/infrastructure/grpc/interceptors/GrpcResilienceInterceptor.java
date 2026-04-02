@@ -5,7 +5,10 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.decorators.Decorators;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.grpc.*;
+import org.junit.jupiter.api.Order;
+import org.springframework.stereotype.Component;
 
+@Component
 public class GrpcResilienceInterceptor implements ServerInterceptor {
 
     private final ResiliencePolicyResolver policyResolver;
@@ -42,6 +45,30 @@ public class GrpcResilienceInterceptor implements ServerInterceptor {
                     guarded.run();
 
                 } catch (Exception ex) {
+                    call.close(
+                            Status.RESOURCE_EXHAUSTED
+                                    .withDescription("Rejected by resilience policy")
+                                    .withCause(ex),
+                            new Metadata()
+                    );
+                }
+            }
+
+            @Override
+            public void onHalfClose() {
+                try {
+
+                    Runnable guarded =
+                            Decorators.ofRunnable(delegate::onHalfClose)
+                                    .withCircuitBreaker(policy.getCircuitBreaker())
+                                    .withBulkhead(policy.getBulkhead())
+                                    .withRateLimiter(policy.getRateLimiter())
+                                    .decorate();
+
+                    guarded.run();
+
+                } catch (Exception ex) {
+
                     call.close(
                             Status.RESOURCE_EXHAUSTED
                                     .withDescription("Rejected by resilience policy")

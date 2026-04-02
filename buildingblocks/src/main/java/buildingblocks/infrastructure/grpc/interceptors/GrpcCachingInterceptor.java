@@ -1,17 +1,17 @@
 package buildingblocks.infrastructure.grpc.interceptors;
 
-import io.grpc.*;
+import buildingblocks.infrastructure.cache.CacheKeyBuilder;
 import buildingblocks.infrastructure.cache.CacheProvider;
-import buildingblocks.shared.utils.JsonUtils;
+import com.google.protobuf.Message;
+import io.grpc.*;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.io.ByteArrayInputStream;
 
 @Component
 public class GrpcCachingInterceptor implements ServerInterceptor {
 
+    private static final long DEFAULT_TTL_SECONDS = 30;
 
     private final CacheProvider cacheProvider;
 
@@ -25,50 +25,103 @@ public class GrpcCachingInterceptor implements ServerInterceptor {
             Metadata headers,
             ServerCallHandler<ReqT, RespT> next) {
 
-        // Wrap the ServerCall to intercept responses
-        ServerCall<ReqT, RespT> cachingCall = new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
-            @Override
-            public void sendMessage(RespT message) {
-                // Cache the response
-                String cacheKey = generateCacheKey(call.getMethodDescriptor().getFullMethodName(), message);
-                cacheProvider.put(cacheKey, JsonUtils.serializeObject(message));
-                super.sendMessage(message);
-            }
-        };
+        // Only cache unary calls
+        if (call.getMethodDescriptor().getType() != MethodDescriptor.MethodType.UNARY) {
+            return next.startCall(call, headers);
+        }
 
-        // Wrap the listener to intercept requests
-        return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(next.startCall(cachingCall, headers)) {
+        final String methodName = call.getMethodDescriptor().getFullMethodName();
 
-            @Override
-            public void onMessage(ReqT request) {
-                try {
-                    String cacheKey = generateCacheKey(call.getMethodDescriptor().getFullMethodName(), request);
-                    String cachedResponseJson = cacheProvider.get(cacheKey);
-                    if (cachedResponseJson != null) {
-                        // Deserialize and return cached response immediately
-                        RespT cachedResponse = (RespT) JsonUtils.deserializeObject(cachedResponseJson, Object.class);
-                        cachingCall.sendMessage(cachedResponse);
-                        cachingCall.close(Status.OK, new Metadata());
-                        return;
+        final Holder<String> cacheKeyHolder = new Holder<>();
+
+        ServerCall<ReqT, RespT> cachingCall =
+                new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
+
+                    @Override
+                    public void sendMessage(RespT message) {
+
+                        try {
+
+                            String cacheKey = cacheKeyHolder.value;
+
+                            if (cacheKey != null && message instanceof Message proto) {
+
+                                byte[] bytes = proto.toByteArray();
+
+                                cacheProvider.put(
+                                        cacheKey,
+                                        bytes,
+                                        DEFAULT_TTL_SECONDS
+                                );
+                            }
+
+                        } catch (Exception ignored) {
+                            // Cache must never break request flow
+                        }
+
+                        super.sendMessage(message);
                     }
-                } catch (Exception e) {
-                    // If cache fails, fallback to normal execution
+                };
+
+        ServerCall.Listener<ReqT> delegate = next.startCall(cachingCall, headers);
+
+        return new ForwardingServerCallListener
+                .SimpleForwardingServerCallListener<>(delegate) {
+
+            private ReqT request;
+
+            @Override
+            public void onMessage(ReqT message) {
+
+                this.request = message;
+                super.onMessage(message);
+            }
+
+            @Override
+            public void onHalfClose() {
+
+                try {
+
+                    if (request instanceof Message protoRequest) {
+
+                        String cacheKey = CacheKeyBuilder.buildGrpcKey(
+                                methodName,
+                                protoRequest
+                        );
+
+                        cacheKeyHolder.value = cacheKey;
+
+                        byte[] cached = cacheProvider.get(cacheKey);
+
+                        if (cached != null) {
+
+                            @SuppressWarnings("unchecked")
+                            RespT response = (RespT) call
+                                    .getMethodDescriptor()
+                                    .getResponseMarshaller()
+                                    .parse(new ByteArrayInputStream(cached));
+
+                            call.sendMessage(response);
+                            call.close(Status.OK, new Metadata());
+
+                            return;
+                        }
+                    }
+
+                } catch (Exception ignored) {
+                    // Cache failures should never break the request
                 }
-                super.onMessage(request);
+
+                super.onHalfClose();
             }
         };
     }
 
-    private <T> String generateCacheKey(String methodName, T requestOrResponse) {
-        try {
-            String json = JsonUtils.serializeObject(requestOrResponse);
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(json.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(methodName).append(":");
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Unable to generate cache key", e);
-        }
+    /**
+     * Simple mutable holder for sharing cache key between
+     * listener and call wrapper.
+     */
+    private static class Holder<T> {
+        T value;
     }
 }

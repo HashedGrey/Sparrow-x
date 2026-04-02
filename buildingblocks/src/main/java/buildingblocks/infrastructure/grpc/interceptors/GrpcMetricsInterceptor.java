@@ -1,8 +1,8 @@
 package buildingblocks.infrastructure.grpc.interceptors;
 
 import io.grpc.*;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import buildingblocks.infrastructure.observability.MetricRegistryUtil;
 
@@ -53,11 +53,10 @@ public class GrpcMetricsInterceptor implements ServerInterceptor {
                     .register(MetricRegistryUtil.registry())
                     .record(duration);
 
-            Counter.builder("grpc.server.responses")
-                    .tag("method", method)
-                    .tag("status", status.getCode().name())
-                    .register(MetricRegistryUtil.registry())
-                    .increment();
+            MetricRegistryUtil.counter("grpc.server.responses",
+                    "method", method,
+                    "status", status.getCode().name()
+            ).increment();
 
             super.close(status, trailers);
         }
