@@ -1,0 +1,319 @@
+name: sparrowx
+
+services:
+  #######################################################
+  #  zookeeper
+  #######################################################
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - infrastructure
+
+  #######################################################
+  #  kafka
+  #######################################################
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - infrastructure
+
+  #######################################################
+  #  postgres
+  #######################################################
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_prepared_transactions=10"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./../postgres-init-scripts:/docker-entrypoint-initdb.d # Mount initialization scripts
+    networks:
+      - infrastructure
+
+  #######################################################
+  #  Cassandra
+  #######################################################
+  cassandra:
+    image: cassandra:5.0
+    container_name: cassandra
+    restart: unless-stopped
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: sparrowx
+      CASSANDRA_DC: dc1
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    networks:
+      - infrastructure
+
+  #######################################################
+  #  Redis
+  #######################################################
+  redis:
+    image: redis
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - 6379:6379
+    networks:
+      - infrastructure
+
+  #######################################################
+  # Grafana Alloy
+  #######################################################
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+
+    volumes:
+      - ./../configs/alloy.hcl:/etc/alloy/config.alloy
+      - ./../../tweet-service/logs:/var/log/services
+
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "12345:12345" # Alloy UI / debug
+
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  #  prometheus
+  #######################################################
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./../configs/prometheus.yaml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      # need this for the OpenTelemetry collector to be able to put metrics into Prometheus
+      - "--web.enable-remote-write-receiver"
+    #   - "--log.level=debug"
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  # node-exporter
+  #######################################################
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+    ports:
+       - "9101:9100"
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  #  grafana
+  #######################################################
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+      #      - GF_AUTH_ANONYMOUS_ENABLED=true
+      #      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      #      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./../configs/grafana/provisioning:/etc/grafana/provisioning
+      - ./../configs/grafana/dashboards:/var/lib/grafana/dashboards
+      ## https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/
+      # - ./../configs/grafana/grafana.ini:/etc/grafana/grafana.ini
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  # Tempo
+  #######################################################
+  tempo:
+    image: grafana/tempo:2.10.1
+
+    container_name: tempo
+    restart: unless-stopped
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ../configs/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"  # tempo
+      - "24317:4317" # otlp grpc
+      - "24318:4318" # otlp http
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  # loki
+  # https://grafana.com/docs/opentelemetry/collector/send-logs-to-loki/
+  # https://github.com/grafana/loki/blob/main/production/docker-compose.yaml
+  # https://github.com/grafana/loki/blob/main/examples/getting-started/docker-compose.yaml
+  #######################################################
+  loki:
+    image: grafana/loki:latest
+    hostname: loki
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./../configs/loki-config.yaml:/etc/loki/local-config.yaml
+    networks:
+      - infrastructure
+
+
+   #######################################################
+   # elasticsearch
+   # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/docker.html#docker-compose-file
+   #######################################################
+  elasticsearch:
+     container_name: elasticsearch
+     restart: unless-stopped
+     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+     environment:
+       - discovery.type=single-node
+       - cluster.name=docker-cluster
+       - node.name=docker-node
+       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+       - xpack.security.enabled=false
+       - xpack.security.http.ssl.enabled=false
+       - xpack.security.transport.ssl.enabled=false
+       - network.host=0.0.0.0
+       - http.port=9200
+       - transport.host=localhost
+       - bootstrap.memory_lock=true
+       - cluster.routing.allocation.disk.threshold_enabled=false
+     ulimits:
+       memlock:
+         soft: -1
+         hard: -1
+     volumes:
+       - elastic-data:/usr/share/elasticsearch/data
+     ports:
+       - ${ELASTIC_HOST_PORT:-9200}:${ELASTIC_PORT:-9200}
+       - 9300:9300
+     networks:
+       - infrastructure
+
+
+
+
+  #######################################################
+  # Keycloak
+  # https://www.keycloak.org/server/containers
+  #######################################################
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    restart: unless-stopped
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+      - KC_DB_USERNAME=postgres
+      - KC_DB_PASSWORD=postgres
+      - KC_HOSTNAME=localhost
+      - KC_HTTP_ENABLED=true
+      - KC_HTTP_PORT=8085
+    command: start-dev
+    ports:
+      - ${KEYCLOAK_HOST_PORT:-8085}:${KEYCLOAK_PORT:-8085}
+    depends_on:
+      - postgres
+    networks:
+      - infrastructure
+
+
+    #######################################################
+    # cadvisor
+    #######################################################
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    networks:
+      - infrastructure
+
+
+networks:
+  infrastructure:
+    name: infrastructure
+    driver: bridge
+
+volumes:
+  elastic-data:
+  postgres-data:
+  cassandra-data:
