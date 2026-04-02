@@ -15,35 +15,62 @@ Under the hood, Sparrowx is goal-oriented and OODA-looped. Every request is fram
 
 
 >*"Hey Chat, Given the following PDFs:*  
->*• GPT-5 System Card.*  
->*• Stanford Research PDF — “Routed LLM Systems Under Stress: External Validity, Hidden Conditionals, and Failure Modes in GPT-5-Style Routers” (Independent Evaluation)*  
->*• Preparedness Framework v2 (security/Compliance risk controls and safeguard posture)*  
+>*• Apple Smart Glasses Narrative, Trust, and Adoption Brief.pdf .*  
+>*• Ambient Computing Use Cases and Daily-Life Integration Brief.pdf *  
 > 
->*Extract and dedupe all testable claims `{metric, benchmark, conditions, value}` into claim clusters.*  
->*For each cluster generate targeted queries (model aliases + benchmark names + critique keywords) and retrieve the relevant tweet 
-discussions (including full tweets/threads, metadata, and author signals). Cluster tweets per claim and label 
-**confirm / mismatch / contradict / unknown** then rank **claim clusters** by impact×confidence×contradiction-density 
-and rank **authors** by credibility×insight-velocity×claim-relevance, with citations to the source PDF sections."*
+>*Search the Social Signal Source Service for weak and strong signals around Apple smart glasses, including emerging demand,
+> privacy anxiety, wearability objections, ecosystem-fit questions, comparison-driven hesitation, and daily-life use-case 
+> fit. Cluster related tweets and thread branches into narratives. Examine engagement dynamics to distinguish passing 
+> chatter from durable momentum and use profile relationships only where community-specific amplification or segment migration 
+> needs tracing. Determine which narratives reflect early curiosity, which reflect practical adoption intent, which 
+> reflect trust or social-acceptability risk and which are most likely to influence launch adoption or brand trust. *
+> Then rank intervention opportunities for marketing, PR, product, and trust teams by impact, momentum, confidence, 
+> and time sensitivity"*
 
 The tweet service is only a high-signal demo data source and the agentic layer itself source-agnostic. Any data source
 (PDFs, logs, EHRs, CRM records, telemetry) can be ingested as context blocks, embedded, and processed through the same
 Observe → Orient → Decide → Act workflow. Replacing tweets simply requires a connector that exposes documents + metadata
 to the RAG layer, allowing the agentic service to operate across multiple enterprise domains, listed below:
 
+### Cybersecurity / Threat Intelligence / Offensive Ops
+
+>Query  
+>*"Continuously discover and refine high-value adversary target hypotheses by correlating infrastructure fingerprints, 
+> ownership indicators, exposure data, identity posture, trust relationships, historical incidents, and analyst notes.  
+> Identify exploitable conditions and likely pivot paths and detect short-lived operational windows caused by environmental 
+> change. Rank target-action opportunities for human operators by mission value, feasibility, confidence, and likely 
+> downstream leverage."
+>
+> Purpose
+> They are looking inside the SecOps Source Service for targeting and exposure signals. Things like infrastructure 
+> fingerprints, asset records, DNS and certificate data, service banners, vulnerability findings, identity and trust 
+> relationships, detections, incident threads, analyst notes, malware/TTP links, telemetry, and historical case 
+> artifacts. These data variations help them determine what belongs to a relevant adversary, where it is weak, 
+> how it may be accessed or traversed, and how valuable it is operationally. The data is then used to build target 
+> hypotheses, rank exploit or investigation paths, and generate decision-support recommendations for human operators.
+>#### Service - SecOps Source Service:
+>#### Military Contractors, Private Security Firms.
+> 
+> 
 ### Finance / Risk & Compliance
 
->*"Given quarterly filings, trading anomaly logs, and analyst reports, extract claims {metric, benchmark, 
-> reporting-period, value} related to risk exposure or model performance. Retrieve trader commentary and market discussions, 
-> classify confirmation vs contradiction, and rank risks by financial impact × uncertainty."
+>*"Search the Financial Risk Verification Service for signals of hidden exposure, concentration risk, liquidity stress, 
+> counterparty fragility, abnormal trading behavior, deteriorating assumptions, and regime shift. Correlate disclosures, 
+> internal risk metrics, anomaly logs, model outputs, analyst notes and market data to infer where the institution may 
+> be more vulnerable than current reporting suggests. Identify likely propagation paths and time-sensitive stress windows 
+> and rank risk scenarios and recommended human actions by exposure size, confidence, urgency, and potential downstream loss."
 > 
 >#### Financial Risk Verification Service:  
 >#### Banks, hedge funds, and fintech compliance teams.
 
 ### Healthcare / Clinical Research
 
->*"Given clinical trial protocols, patient EHR notes, and pharmacovigilance reports, extract all testable safety claims 
-> {event, incidence-rate, dosage-condition} and cluster them by drug and trial phase. Retrieve clinician discussions and
-> trial commentary, label confirm / contradict / unknown, and rank safety signals by risk × evidence-strength."
+>*"Search the Clinical Safety Verification Service for signals of elevated patient risk, adverse drug interactions, 
+> subgroup-specific harm, protocol-sensitive deterioration, unexpected outcome patterns, and emerging contraindications. 
+> Correlate protocols, EHR notes, medication histories, labs, pharmacovigilance reports, and clinician observations to 
+> infer where care is becoming unsafe before it is formally recognized. Identify likely causal paths and time-sensitive 
+> intervention windows and rank safety scenarios and recommended human actions by severity, confidence, urgency, and 
+> potential downstream harm."
 >
 >#### Clinical Safety Intelligence Service
 >#### Pharmaceutical, biotech, and hospital research networks.
