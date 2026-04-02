@@ -1,4 +1,7 @@
 package buildingblocks.infrastructure.persistence.outbox.model;
 
-public class MessageDeliveryType {
+public enum MessageDeliveryType {
+    OUTBOX,
+    INBOX,
+    INTERNAL
 }
