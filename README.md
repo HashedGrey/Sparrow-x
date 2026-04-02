@@ -18,7 +18,7 @@ Under the hood, Sparrowx is goal-oriented and OODA-looped. Every request is fram
 >*• Apple Smart Glasses Narrative, Trust, and Adoption Brief.pdf .*  
 >*• Ambient Computing Use Cases and Daily-Life Integration Brief.pdf *  
 > 
->*Search the Social Signal Source Service for weak and strong signals around Apple smart glasses, including emerging demand,
+>*Search the Social Signal Source Services(Search, Tweet & Profile) for weak and strong signals around Apple smart glasses, including emerging demand,
 > privacy anxiety, wearability objections, ecosystem-fit questions, comparison-driven hesitation, and daily-life use-case 
 > fit. Cluster related tweets and thread branches into narratives. Examine engagement dynamics to distinguish passing 
 > chatter from durable momentum and use profile relationships only where community-specific amplification or segment migration 
