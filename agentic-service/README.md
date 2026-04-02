@@ -100,6 +100,44 @@ In short:
 | Evidence Storage | MinIO for document artifacts where applicable               |
 | Observability | Loki + Tempo + Alloy + Prometheus == Grafana                |
 
+
+## How to Read the Skeleton
+
+For now the repository contains **structure without implementation**, which is intentional since the coding approach is top-down.  
+So if you want to understand how the system is meant to work, this skeleton ↓ can be read as an architectural execution map.
+
+### Start Here: `agentic-tree.txt`
+The file is an ASCII File Directory tree that functions as an execution map designed to be fed directly into an LLM to give a high level view of the engine.
+
+This is the **authoritative mental model** of the system which shows:
+- Agent boundaries
+- Deterministic vs LLM-driven steps
+- Evidence-only memory rules
+- Domain-read vs evidence-retrieval separation
+- Validation, policy and budget gates
+- Where hallucination is impossible by construction
+
+### How to Use It
+
+Paste the file into an LLM and ask:
+```text
+Explain how this agentic system executes a complex multi-hop RAG mission,
+including planning, evidence verification, and synthesis.
+````
+
+
+
+It shows:
+
+- service boundaries
+- where retrieval happens
+- where hydration happens
+- where Embabel agents operate
+- where deterministic enforcement lives
+- how the final result is assembled
+
+---
+
 ## Execution Model
 
 The current repository is intentionally top-down.  
@@ -270,40 +308,3 @@ That means:
 - enrichments must come from valid domain services
 - synthesis should preserve links back to underlying support
 - invalid or ungrounded outputs can be rejected by governance checks
-
-## How to Read the Skeleton
- 
-For now the repository contains **structure without implementation**, which is intentional since the coding approach is top-down.  
-So if you want to understand how the system is meant to work, this skeleton ↓ can be read as an architectural execution map.
-
-### Start Here: `agentic-tree.txt`
-The file is an ASCII File Directory tree that functions as an execution map designed to be fed directly into an LLM to give a high level view of the engine.
-
-This is the **authoritative mental model** of the system which shows:
-- Agent boundaries
-- Deterministic vs LLM-driven steps
-- Evidence-only memory rules
-- Domain-read vs evidence-retrieval separation
-- Validation, policy and budget gates
-- Where hallucination is impossible by construction
-
-### How to Use It
-
-Paste the file into an LLM and ask:
-```text
-Explain how this agentic system executes a complex multi-hop RAG mission,
-including planning, evidence verification, and synthesis.
-````
-
-
-
-It shows:
-
-- service boundaries
-- where retrieval happens
-- where hydration happens
-- where Embabel agents operate
-- where deterministic enforcement lives
-- how the final result is assembled
-
----
