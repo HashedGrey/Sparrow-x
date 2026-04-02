@@ -1,4 +1,4 @@
 package buildingblocks.core.queries;
 
-public interface IQuery<TResponse>  {
+public interface Query<R>  {
 }

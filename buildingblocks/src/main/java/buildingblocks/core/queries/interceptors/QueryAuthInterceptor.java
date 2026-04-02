@@ -1,17 +1,18 @@
 package buildingblocks.core.queries.interceptors;
 
-import buildingblocks.core.queries.IQuery;
-import buildingblocks.core.queries.QueryHandler;
+import buildingblocks.core.queries.Query;
+import buildingblocks.core.queries.QueryExecutionChain;
+import buildingblocks.core.queries.QueryInterceptor;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Component
-@Order(1)
+@Order(0)
 public class QueryAuthInterceptor implements QueryInterceptor {
 
     @Override
-    public <Q extends IQuery<R>, R> R intercept(Q query, QueryHandler<Q, R> next) {
-        // auth / scope checks
-        return next.handle(query);
+    public <R> R intercept(Query<R> query, QueryExecutionChain<R> chain) {
+        // auth / scope / tenant checks
+        return chain.proceed(query);
     }
 }
