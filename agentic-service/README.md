@@ -1,6 +1,7 @@
 # Agentic RAG Service
 
-This service implements **high-fidelity, multi-hop Retrieval-Augmented Generation (RAG)** for **SparrowX**.  
+This service is still a skeleton and under development, but contains all high level 'gridlines' to build upon top down.  
+It implements **high-fidelity, multi-hop Retrieval-Augmented Generation (RAG)** for **SparrowX**.  
 It is built on the **Embabel agentic framework** to execute complex analytical missions that require:
 
 - Cross-document reasoning
