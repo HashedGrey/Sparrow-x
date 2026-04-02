@@ -8,7 +8,7 @@ public interface CacheProvider {
      * @param key   cache key
      * @param value cache value as string (serialized)
      */
-    void put(String key, String value);
+    void put(String key, byte[] value, long ttlSeconds);
 
     /**
      * Get a value from the cache
@@ -16,7 +16,7 @@ public interface CacheProvider {
      * @param key cache key
      * @return cached value, or null if missing
      */
-    String get(String key);
+    byte[] get(String key);
 
     /**
      * Remove a value from the cache

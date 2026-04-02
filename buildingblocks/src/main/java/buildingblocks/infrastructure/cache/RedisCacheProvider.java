@@ -2,53 +2,64 @@ package buildingblocks.infrastructure.cache;
 
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.time.Duration;
 
 @Component
 public class RedisCacheProvider implements CacheProvider {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final RedisTemplate<String, byte[]> redisTemplate;
+    private final ValueOperations<String, byte[]> ops;
 
-    public RedisCacheProvider(RedisTemplate<String, String> redisTemplate) {
+    private static final String PREFIX = "grpc-cache:";
+
+    public RedisCacheProvider(RedisTemplate<String, byte[]> redisTemplate) {
         this.redisTemplate = redisTemplate;
-    }
-
-    public void put(String key, String value, Duration ttl, String keyPrefix) {
-        ValueOperations<String, String> ops = redisTemplate.opsForValue();
-        ops.set(keyPrefix + key, value, ttl);
-    }
-
-    public String get(String key, String keyPrefix) {
-        ValueOperations<String, String> ops = redisTemplate.opsForValue();
-        return ops.get(keyPrefix + key);
-    }
-
-    public void evict(String key, String keyPrefix) {
-        redisTemplate.delete(keyPrefix + key);
+        this.ops = redisTemplate.opsForValue();
     }
 
     @Override
-    public void put(String key, String value) {
-        throw new UnsupportedOperationException("Use put with TTL and key prefix for service-specific caching");
+    public void put(String key, byte[] value, long ttlSeconds) {
+        ops.set(PREFIX + key, value, Duration.ofSeconds(ttlSeconds));
     }
 
     @Override
-    public String get(String key) {
-        throw new UnsupportedOperationException("Use get with key prefix for service-specific caching");
+    public byte[] get(String key) {
+        return ops.get(PREFIX + key);
     }
 
     @Override
     public void evict(String key) {
-        throw new UnsupportedOperationException("Use evict with key prefix for service-specific caching");
+        redisTemplate.delete(PREFIX + key);
     }
 
     @Override
     public void clear() {
-        redisTemplate.execute((RedisCallback<Object>) connection -> {
-            connection.flushDb();
+
+        redisTemplate.execute((RedisCallback<Void>) connection -> {
+
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(PREFIX + "*")
+                    .count(1000)
+                    .build();
+
+            connection.openPipeline();
+
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+
+                while (cursor.hasNext()) {
+                    connection.keyCommands().del(cursor.next());
+                }
+
+            }
+
+            connection.closePipeline();
+
             return null;
         });
     }
