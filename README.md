@@ -26,6 +26,9 @@ Under the hood, Sparrowx is goal-oriented and OODA-looped. Every request is fram
 > reflect trust or social-acceptability risk and which are most likely to influence launch adoption or brand trust. *
 > Then rank intervention opportunities for marketing, PR, product, and trust teams by impact, momentum, confidence, 
 > and time sensitivity"*
+> 
+
+### This kind of high-stakes query is the sort of thing data-ingestion and signal-digestion platforms like [Sprinklr](https://www.sprinklr.com/) use for large enterprises.
 
 The tweet service is only a high-signal demo data source and the agentic layer itself source-agnostic. Any data source
 (PDFs, logs, EHRs, CRM records, telemetry) can be ingested as context blocks, embedded, and processed through the same
