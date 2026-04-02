@@ -1,49 +1,283 @@
 # Agentic RAG Service
 
-This service is still a skeleton and under development, but contains all high level 'gridlines' to build upon top down.  
-It implements **high-fidelity, multi-hop Retrieval-Augmented Generation (RAG)** for **SparrowX**.  
-It is built on the **Embabel agentic framework** to execute complex analytical missions that require:
+The Agentic RAG Service is SparrowX’s goal-driven retrieval and reasoning layer for complex analytical queries over social and document evidence.
 
-- Cross-document reasoning
-- Social evidence synthesis
-- Strict provenance guarantees
----
+It is built on Embabel and designed to execute structured RAG missions that require:
+
+- multi-step retrieval
+- evidence comparison
+- controlled tool use
+- domain-aware hydration
+- strict provenance in final outputs
+
+This service is still under active development, but the repository already defines the architecture, boundaries, and execution model that the implementation will follow.
+
+## Core Idea
+
+This is not a generic “chat over data” wrapper. The service treats retrieval and reasoning as a mission pipeline made of explicit stages:
+
+- interpret the user’s request
+- retrieve the right evidence
+- enrich only where necessary
+- compare and analyze
+- synthesize a grounded result
+
+The LLM is used as a reasoning component inside a governed pipeline, not as an unconstrained source of truth.  
+Determinism go brrr...
 ## Core Philosophy
-Unlike standard *"chat-over-PDF"* wrappers, this system treats RAG as a **structured pipeline of discrete, verifiable actions**.
 
 ### Mission-Oriented
-Optimized for **missions** (long-running research or execution tasks) rather than simple Q&A.
 
-### DICE Architecture
-Uses a **Domain-Integrated Context Engineering** model to ensure the LLM only interacts with **projected, normalized metadata**.
+The service is optimized for analytical missions, not simple one-shot chat. 
+A query may require multiple retrieval hops, ranking passes, comparison steps, and evidence enrichment before a result is produced.
 
 ### Evidence-First
-Hallucinations are mitigated **by construction**. Agents are restricted to tools that operate on **verified evidence stores**.
+
+The system is designed so that outputs are grounded in retrieved evidence, not invented by the model.  
+The LLM helps interpret, route, compare, and summarize, but the evidence comes from SparrowX stores and services.
 
 ### Deterministic Governance
-Budgets, safety policies, and provenance checks are **enforced by the platform**, not the LLM.
 
----
+Budgets, tool permissions, validation rules, and provenance checks are enforced by the platform.  
+The LLM operates within those boundaries.
+
+### Clear Domain Boundaries
+
+The agentic layer does not own social-domain truth.  
+It retrieves and reasons across evidence, while canonical tweet and profile truth remain in SparrowX domain services.
+
+## What the Service Actually Does
+
+For social RAG queries, the runtime flow is:
+
+1. **Parse the user query**  
+   The service sends the query to an LLM to determine intent, task shape, retrieval targets, and comparison objectives.
+
+2. **Build retrieval vectors**  
+   BGE Large is used to embed the query for semantic retrieval.
+
+3. **Retrieve candidate tweet IDs from Milvus**  
+   Milvus already contains tweet vectors produced upstream when Tweet Service writes occur.  
+   The agentic service does not embed and store tweets at query time.
+
+4. **Fetch searchable tweet/thread evidence from Search Service**  
+   The returned IDs are used to retrieve tweet documents, thread context, and searchable metadata from Search Service / Elasticsearch.
+
+5. **Hydrate where required**  
+   When richer domain truth is needed, the service hydrates selectively from:
+  - **Tweet Service** for canonical tweet/thread details
+  - **Profile Service** for author/profile context
+
+   Hydration is not always required; it is done only when the mission needs it.
+
+6. **Compare, cluster, and analyze**  
+   Embabel engine then groups the retrieved evidence into coherent narratives, clusters or analytical units.  
+   The system can compare signals, contradictions, momentum, stance, or relevance depending on the mission.
+
+7. **Synthesize the result**  
+   The final answer is produced with citations, caveats, and structured reasoning grounded in retrieved evidence.
+
+## Important Retrieval Boundary
+
+Tweets are already stored in Milvus outside the agent workflow, triggered by Tweet Service writes.  
+That means the agentic service should be understood as a query-time orchestration and reasoning layer, not a tweet-ingestion pipeline.
+
+In short:
+
+- **Milvus** = semantic lookup surface for tweet IDs
+- **Search Service / Elasticsearch** = searchable retrieval surface for tweet/thread documents
+- **Tweet Service / Profile Service** = hydration and canonical domain truth
+- **Agentic RAG Service** = orchestration, comparison, reasoning, and synthesis
 
 ## Technical Stack
 
-| Layer | Technology                                                                                    |
-|---|-----------------------------------------------------------------------------------------------|
-| Framework | Spring Boot + Embabel Agent Runtime                                                           |
-| Communication | gRPC (Mission API) + HTTP (Admin/Eval)                                                        |
-| Storage | Elasticsearch (Lexical), CassandraDb(Hydration), Milvus (Vector), Neo4j (Graph), MinIO (Blob) |
-| Observability | OpenTelemetry (OTEL) + Prometheus                                                             |
+| Layer | Technology                                                  |
+|---|-------------------------------------------------------------|
+| Framework | Spring Boot + Embabel Agent Runtime                         |
+| Communication | gRPC (Mission API) + HTTP (Admin/Eval)                      |
+| Retrieval | Milvus (vector retrieval), Elasticsearch via Search Service |
+| Hydration | Tweet Service, Profile Service                              |
+| Evidence Storage | MinIO for document artifacts where applicable               |
+| Observability | Loki + Tempo + Alloy + Prometheus == Grafana                |
 
----
+## Execution Model
 
-# The Execution Pipeline
-At present, the repository contains **structure without implementation**, which is intentional since the coding approach is top-down.
-The purpose of this is to make the **reasoning architecture explicit before code exists**.
+The current repository is intentionally top-down.  
+It defines the execution shape, interfaces, policies, and system boundaries before all runtime details are fully implemented.
 
-If you want to understand how complex analytical missions are decomposed, routed, verified and synthesized:
+This makes the intended reasoning model explicit:
 
-## Start Here: `agentic-tree.txt`
-The file is an ASCII File Directory tree that functions as an execution map designed to be fed directly into an LLM.
+- where LLM-driven steps exist
+- where deterministic validation exists
+- where domain reads happen
+- where evidence retrieval happens
+- where governance gates sit
+- where provenance is enforced
+
+## Canonical Mission Flow
+
+Every mission follows a governed execution lifecycle managed by the mission coordinator.
+
+### 1. Query Interpretation
+The user submits a mission or RAG query.  
+The service determines:
+
+- what kind of task this is
+- what evidence sources are needed
+- whether retrieval is semantic, lexical, or hybrid
+- whether enrichment or hydration will be necessary
+- what constraints or budgets apply
+
+### 2. Retrieval
+
+The service performs retrieval in layers. For social evidence:
+
+- generate retrieval embedding with BGE Large
+- search Milvus for nearest tweet vectors
+- collect candidate tweet IDs
+- fetch tweet/thread evidence from Search Service
+
+For document evidence, the service may also retrieve indexed chunks and metadata from evidence stores if the mission includes PDFs or other artifacts.
+
+### 3. Hydration
+
+The service enriches retrieved results only when needed.
+
+Examples:
+
+- canonical tweet fields from Tweet Service
+- author or segment context from Profile Service
+- thread expansion where clustering or comparison requires it
+
+This keeps retrieval fast while preserving access to domain truth when deeper analysis is needed.
+
+### 4. Analysis
+
+The service organizes and evaluates evidence. Depending on the mission, this can include:
+
+- clustering related tweets or threads into narratives
+- comparing signals across sources
+- identifying contradictions or alignment
+- separating weak chatter from durable momentum
+- ranking narratives, authors, or intervention opportunities
+
+### 5. Synthesis
+
+The service produces a grounded output that may include:
+
+- ranked narratives
+- comparisons
+- intervention recommendations
+- citations
+- caveats
+- confidence notes
+
+## Repository Map
+
+### 1. Mission Entry Point
+
+`api/grpc/AgenticRagGrpcImpl.java`
+
+Primary API for:
+
+- submitting missions
+- streaming progress
+- returning final outputs
+
+`mission/MissionFlowCoordinator.java`
+
+Coordinates mission stages, tool calls, retrieval passes, and synthesis.
+
+### 2. Mission Stages
+
+`mission/MissionStage.java`
+
+Defines the canonical execution path.
+
+At a high level this looks like:
+
+- interpret
+- retrieve
+- fetch
+- hydrate
+- analyze
+- rank
+- synthesize
+
+### 3. DICE / Guardrails Layer
+
+`dice/`
+
+This layer ensures the model interacts with controlled, typed, projected context rather than arbitrary raw payloads.
+
+Here, **DICE** means **Domain Injected Context Engineering**.
+
+Key responsibilities include:
+
+- context assembly
+- metadata normalization
+- structured binding
+- invariant enforcement
+- output repair and rejection where needed
+
+### 4. Agents
+
+`agents/`
+
+Embabel agents define the high-level reasoning roles, such as:
+
+- query interpretation
+- social evidence orchestration
+- stance / ranking analysis
+- final synthesis
+
+### 5. Actions
+
+`actions/`
+
+Actions are smaller, reusable execution units for tasks such as:
+
+- targeted query building
+- tweet retrieval
+- clustering
+- stance labeling
+- ranking
+- provenance verification
+- redaction
+
+### 6. Governance and Policy
+
+`policy/` and `governance/`
+
+This layer enforces:
+
+- budgets
+- safety constraints
+- tool authorization
+- compliance boundaries
+- provenance guarantees
+
+These controls belong to the platform, not to the model.
+
+## Provenance Guarantees
+
+A key design principle is that the service should not emit “floating conclusions.”
+
+Final outputs should be traceable to retrieved evidence.  
+That means:
+
+- evidence must come from approved retrieval surfaces
+- enrichments must come from valid domain services
+- synthesis should preserve links back to underlying support
+- invalid or ungrounded outputs can be rejected by governance checks
+
+## How to Read the Skeleton
+ 
+For now the repository contains **structure without implementation**, which is intentional since the coding approach is top-down.  
+So if you want to understand how the system is meant to work, this skeleton ↓ can be read as an architectural execution map.
+
+### Start Here: `agentic-tree.txt`
+The file is an ASCII File Directory tree that functions as an execution map designed to be fed directly into an LLM to give a high level view of the engine.
 
 This is the **authoritative mental model** of the system which shows:
 - Agent boundaries
@@ -60,148 +294,16 @@ Paste the file into an LLM and ask:
 Explain how this agentic system executes a complex multi-hop RAG mission,
 including planning, evidence verification, and synthesis.
 ````
----
+
+
+
+It shows:
+
+- service boundaries
+- where retrieval happens
+- where hydration happens
+- where Embabel agents operate
+- where deterministic enforcement lives
+- how the final result is assembled
 
 ---
-Every mission follows a canonical lifecycle managed by the **MissionFlowCoordinator**.
-
-### 1. Ingest & Project
-Raw **PDFs / Tweets** are parsed and chunked.
-
-The **DICE projection layer** normalizes metadata such as:
-
-- { titles ,authors ,dates ,sources }
-
-This ensures the **LLM never sees raw document headers or messy metadata**.
-
----
-
-### 2. Claim Extraction
-
-The **ClaimMiningAgent** extracts structured, testable claims:
-- {
-  metric,
-  benchmark,
-  conditions,
-  value
-  }
-
-This converts narrative text into **machine-analyzable claims**.
-
----
-
-### 3. Deduplication
-
-Claims across multiple documents are merged into **ClaimClusters**.
-
-Each cluster:
-
-- groups semantically equivalent claims
-- retains **full provenance** to original sources.
-
----
-
-### 4. Social Discovery
-
-The **SocialEvidenceAgent** generates targeted queries to retrieve real-world discussion signals:
-
-- Tweets
-- Threads
-- Public commentary
-
-This adds **external social validation or contradiction** to academic or formal claims.
-
----
-
-### 5. Analysis & Stance
-
-The **StanceAndRankingAgent** labels evidence as:
-
-- **confirm**
-- **mismatch**
-- **contradict**
-
-Claim clusters are ranked based on **contradiction density**, surfacing the most controversial or debated claims first.
-
----
-
-### 6. Synthesis
-
-The **ReportSynthesisAgent** generates the final analytical report.
-
-Outputs include:
-
-- mandatory citations
-- caveats
-- claim-level provenance
-- structured reasoning summaries
-
----
-
-# Repository Map
-
-## 1. Mission Entry Point
-
-**api/grpc/AgenticRagGrpcImpl.java**
-
-Primary interface for:
-
-- submitting missions
-- streaming mission progress events
-
-**mission/MissionFlowCoordinator.java**
-
-Orchestrates transitions between **MissionStages** in the pipeline.
-
----
-
-## 2. The DICE Layer (Guardrails)
-
-**dice/projection/EvidenceProjection.java**
-
-Canonicalizes metadata so the **LLM never sees raw, messy document headers**.
-
-**dice/GuardrailBinder.java**
-
-Ensures every generated output maps back to a **valid SourceRef**.
-
----
-
-## 3. Agent & Action Definitions
-
-**agents/**  
-Contains Embabel `@Agent` components such as:
-
-- `ClaimMiningAgent`
-- `SocialEvidenceAgent`
-- `StanceAndRankingAgent`
-- `ReportSynthesisAgent`
-
-**actions/**  
-Contains atomic, reusable work units executed by agents:
-
-- `ExtractClaimsAction`
-- `LabelStanceAction`
-- other deterministic actions
-
----
-
-## 4. Governance & Policy
-
-**policy/**
-
-Defines deterministic platform rules:
-
-- `BudgetPolicy`
-- `SafetyPolicy`
-- `ToolAuthz`
-
-These policies enforce **execution constraints independent of the LLM**.
-
----
-
-**governance/ProvenanceVerifier.java**
-
-Rejects any **floating citations** that cannot be traced to a specific **PDF chunk or document fragment**.
-
-This guarantees **verifiable provenance for every claim in the final report**.
