@@ -44,7 +44,7 @@ to the RAG layer, allowing the agentic service to operate across multiple enterp
 > change. Rank target-action opportunities for human operators by mission value, feasibility, confidence, and likely 
 > downstream leverage."
 >
-> Purpose
+> Purpose  
 > They are looking inside the SecOps Source Service for targeting and exposure signals. Things like infrastructure 
 > fingerprints, asset records, DNS and certificate data, service banners, vulnerability findings, identity and trust 
 > relationships, detections, incident threads, analyst notes, malware/TTP links, telemetry, and historical case 
