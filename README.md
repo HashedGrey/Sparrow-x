@@ -35,26 +35,8 @@ The tweet service is only a high-signal demo data source and the agentic layer i
 Observe → Orient → Decide → Act workflow. Replacing tweets simply requires a connector that exposes documents + metadata
 to the RAG layer, allowing the agentic service to operate across multiple enterprise domains, listed below:
 
-### Cybersecurity / Threat Intelligence / Offensive Ops
 
->Query  
->*"Continuously discover and refine high-value adversary target hypotheses by correlating infrastructure fingerprints, 
-> ownership indicators, exposure data, identity posture, trust relationships, historical incidents, and analyst notes.  
-> Identify exploitable conditions and likely pivot paths and detect short-lived operational windows caused by environmental 
-> change. Rank target-action opportunities for human operators by mission value, feasibility, confidence, and likely 
-> downstream leverage."
->
-> Purpose  
-> They are looking inside the SecOps Source Service for targeting and exposure signals. Things like infrastructure 
-> fingerprints, asset records, DNS and certificate data, service banners, vulnerability findings, identity and trust 
-> relationships, detections, incident threads, analyst notes, malware/TTP links, telemetry, and historical case 
-> artifacts. These data variations help them determine what belongs to a relevant adversary, where it is weak, 
-> how it may be accessed or traversed, and how valuable it is operationally. The data is then used to build target 
-> hypotheses, rank exploit or investigation paths, and generate decision-support recommendations for human operators.
->#### Service - SecOps Source Service:
->#### Military Contractors, Private Security Firms.
-> 
-> 
+
 ### Finance / Risk & Compliance
 
 >*"Search the Financial Risk Verification Service for signals of hidden exposure, concentration risk, liquidity stress, 
@@ -77,6 +59,27 @@ to the RAG layer, allowing the agentic service to operate across multiple enterp
 >
 >#### Clinical Safety Intelligence Service
 >#### Pharmaceutical, biotech, and hospital research networks.
+
+
+
+ ### Cybersecurity / Threat Intelligence / Defensive Ops
+
+>Query  
+>*"Continuously discover and refine high-value adversary target hypotheses by correlating infrastructure fingerprints,
+> ownership indicators, exposure data, identity posture, trust relationships, historical incidents, and analyst notes.  
+> Identify exploitable conditions and likely pivot paths and detect short-lived operational windows caused by environmental
+> change. Rank target-action opportunities for human operators by mission value, feasibility, confidence, and likely
+> downstream leverage."
+>
+> Purpose  
+> They are looking inside the SecOps Source Service for targeting and exposure signals. Things like infrastructure
+> fingerprints, asset records, DNS and certificate data, service banners, vulnerability findings, identity and trust
+> relationships, detections, incident threads, analyst notes, malware/TTP links, telemetry, and historical case
+> artifacts. These data variations help them determine what belongs to a relevant adversary, where it is weak,
+> how it may be accessed or traversed, and how valuable it is operationally. The data is then used to build target
+> hypotheses, rank exploit or investigation paths, and generate decision-support recommendations for human operators.
+>#### Service - SecOps Source Service:
+>#### Military Contractors, Private Security Firms.
 
 ## Goals Of This Project
 - 🔹 Using Agentic Context Engineering: The system decomposes a user goal into retrieval and reasoning actions, dynamically combining hyper-search over tweets, relationship-aware lookups, and vector-based semantic recall; all expressed through natural-language intent rather than fixed queries. 
