@@ -56,8 +56,8 @@ For social RAG queries, the runtime flow is:
 2. **Build retrieval vectors**  
    BGE Large is used to embed the query for semantic retrieval.
 
-3. **Retrieve candidate tweet IDs from QDrant**  
-   QDrant already contains tweet vectors produced upstream when Tweet Service writes occur.  
+3. **Retrieve candidate tweet IDs from Qdrant**  
+   Qdrant already contains tweet vectors produced upstream when Tweet Service writes occur.  
    The agentic service does not embed and store tweets at query time.
 
 4. **Fetch searchable tweet/thread evidence from Search Service**  
@@ -79,12 +79,12 @@ For social RAG queries, the runtime flow is:
 
 ## Important Retrieval Boundary
 
-Tweets are already stored in QDrant outside the agent workflow, triggered by Tweet Service writes.  
+Tweets are already stored in Qdrant outside the agent workflow, triggered by Tweet Service writes.  
 That means the agentic service should be understood as a query-time orchestration and reasoning layer, not a tweet-ingestion pipeline.
 
 In short:
 
-- **QDrant** = semantic lookup surface for tweet IDs
+- **Qdrant** = semantic lookup surface for tweet IDs
 - **Search Service / Elasticsearch** = searchable retrieval surface for tweet/thread documents
 - **Tweet Service / Profile Service** = hydration and canonical domain truth
 - **Agentic RAG Service** = orchestration, comparison, reasoning, and synthesis
@@ -95,7 +95,7 @@ In short:
 |---|-------------------------------------------------------------|
 | Framework | Spring Boot + Embabel Agent Runtime                         |
 | Communication | gRPC (Mission API) + HTTP (Admin/Eval)                      |
-| Retrieval | QDrant (vector retrieval), Elasticsearch via Search Service |
+| Retrieval | Qdrant (vector retrieval), Elasticsearch via Search Service |
 | Hydration | Tweet Service, Profile Service                              |
 | Evidence Storage | MinIO for document artifacts where applicable               |
 | Observability | Loki + Tempo + Alloy + Prometheus == Grafana                |
@@ -171,7 +171,7 @@ The service determines:
 The service performs retrieval in layers. For social evidence:
 
 - generate retrieval embedding with BGE Large
-- search QDrant for nearest tweet vectors
+- search Qdrant for nearest tweet vectors
 - collect candidate tweet IDs
 - fetch tweet/thread evidence from Search Service
 

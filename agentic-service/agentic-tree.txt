@@ -1,6 +1,6 @@
 agentic-rag-service
 ├── pom.xml
-│   // Spring Boot + Embabel starters + gRPC + OTEL + security + ES/QDrant/Neo4j/MinIO clients.
+│   // Spring Boot + Embabel starters + gRPC + OTEL + security + ES/Qdrant/Neo4j/MinIO clients.
 │   // Add durable-runtime deps only for persistence, queues, locking, migrations, and serialization.
 │   // Keep Embabel as planner; do not reimplement planning internals.
 │
@@ -53,7 +53,7 @@ agentic-rag-service
     │   │   │   ├── LlmConfig.java
     │   │   │   │   // Model endpoints, structured output settings, retries, fallbacks, budgets.
     │   │   │   ├── RetrievalConfig.java
-    │   │   │   │   // ES + QDrant + local exact index + alias dictionaries + retrieval knobs.
+    │   │   │   │   // ES + Qdrant + local exact index + alias dictionaries + retrieval knobs.
     │   │   │   ├── IngestionConfig.java
     │   │   │   │   // Scheduler pools, rate limits, parser safety flags, backfill controls.
     │   │   │   ├── GrpcHttpConfig.java
