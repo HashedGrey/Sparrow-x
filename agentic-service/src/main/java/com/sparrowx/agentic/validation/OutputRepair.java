@@ -1,5 +1,5 @@
 ﻿package com.sparrowx.agentic.validation;
 
 
-public class SchemaValidator {
+public class OutputRepair {
 }

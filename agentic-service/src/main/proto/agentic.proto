@@ -1,41 +1,376 @@
 syntax = "proto3";
 
-package sparrowx.agentic.proto;
+package sparrowx.agentic.v1;
 
-option java_package = "com.sparrowx.agentic.proto.stubs";
 option java_multiple_files = true;
+option java_package = "com.sparrowx.agenticrag.proto";
 option java_outer_classname = "AgenticProto";
 
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+// =========================
+// Public Mission API
+// =========================
 
 service AgenticService {
+  rpc SubmitMission(SubmitMissionRequest) returns (SubmitMissionResponse);
 
-  // Executes a single agentic mission and returns the
-  // synthesized final answer.
-  rpc Execute (AgenticRequest) returns (AgenticResponse);
+  rpc StreamMissionProgress(StreamMissionProgressRequest)
+      returns (stream MissionProgressEvent);
+
+  rpc GetMissionResult(GetMissionResultRequest) returns (MissionResultResponse);
 }
 
-// =======================================================
-// Messages
-// =======================================================
+// =========================
+// Submit / Result
+// =========================
 
-message AgenticRequest {
+message SubmitMissionRequest {
+  string request_id = 1;
+  string tenant_id = 2;
+  string user_id = 3;
 
-  string user_id = 1;
+  string natural_language_query = 10;
+  repeated InputArtifact input_artifacts = 11;
 
-  string prompt = 2;
+  MissionConstraints constraints = 20;
+  MissionBudget budget = 21;
 
-  // map<string, string> context = 3;
-  // int32 max_tokens = 4;
-  // double temperature = 5;
+  map<string, string> metadata = 30;
 }
 
-message AgenticResponse {
+message SubmitMissionResponse {
+  string mission_id = 1;
+  MissionStatus status = 2;
+  MissionPath selected_path = 3;
+  google.protobuf.Timestamp submitted_at = 4;
+}
 
-  string output = 1;
+message GetMissionResultRequest {
+  string mission_id = 1;
+  string tenant_id = 2;
+}
 
-  bool success = 2;
+message MissionResultResponse {
+  string mission_id = 1;
+  MissionStatus status = 2;
 
-  string error = 3;
+  oneof payload {
+    MissionResult result = 10;
+    MissionError error = 11;
+  }
 
-  // int32 tokens_used = 4;
+  google.protobuf.Timestamp completed_at = 20;
+}
+
+// =========================
+// Mission Contract
+// =========================
+
+message MissionConstraints {
+  MissionPath preferred_path = 1;
+
+  repeated string allowed_tools = 10;
+  repeated string allowed_source_services = 11;
+  repeated string required_output_sections = 12;
+
+  bool require_citations = 20;
+  bool require_human_review = 21;
+  bool allow_external_sources = 22;
+  bool allow_profile_or_graph_enrichment = 23;
+
+  google.protobuf.Duration max_runtime = 30;
+
+  map<string, string> policy_hints = 40;
+}
+
+message MissionBudget {
+  int32 max_llm_calls = 1;
+  int32 max_tool_calls = 2;
+  int32 max_retrieval_queries = 3;
+  int32 max_items_to_hydrate = 4;
+  int64 max_input_tokens = 5;
+  int64 max_output_tokens = 6;
+  int64 max_cost_micros = 7;
+}
+
+message InputArtifact {
+  string artifact_id = 1;
+  ArtifactType type = 2;
+
+  oneof location {
+    string object_uri = 10;
+    bytes inline_bytes = 11;
+    string external_uri = 12;
+  }
+
+  string filename = 20;
+  string content_type = 21;
+  string sha256 = 22;
+
+  map<string, string> metadata = 30;
+}
+
+enum ArtifactType {
+  ARTIFACT_TYPE_UNSPECIFIED = 0;
+  ARTIFACT_TYPE_DOCUMENT = 1;
+  ARTIFACT_TYPE_PDF = 2;
+  ARTIFACT_TYPE_TEXT = 3;
+  ARTIFACT_TYPE_JSON = 4;
+  ARTIFACT_TYPE_IMAGE = 5;
+  ARTIFACT_TYPE_AUDIO = 6;
+  ARTIFACT_TYPE_VIDEO = 7;
+  ARTIFACT_TYPE_DATASET = 8;
+}
+
+// =========================
+// Progress
+// =========================
+
+message StreamMissionProgressRequest {
+  string mission_id = 1;
+  string tenant_id = 2;
+  string resume_token = 3;
+}
+
+message MissionProgressEvent {
+  string mission_id = 1;
+  MissionStatus status = 2;
+
+  string stage_id = 10;
+  string stage_name = 11;
+
+  string step_id = 20;
+  string step_name = 21;
+  StepStatus step_status = 22;
+
+  ComponentInvocation current_component = 30;
+
+  string message = 40;
+  double progress_percent = 41;
+
+  string resume_token = 50;
+  google.protobuf.Timestamp emitted_at = 60;
+
+  map<string, string> metadata = 70;
+}
+
+// =========================
+// Utility AI Components
+// =========================
+
+message ComponentInvocation {
+  string component_id = 1;
+  ComponentKind component_kind = 2;
+  string component_name = 3;
+
+  google.protobuf.Struct input_summary = 10;
+  google.protobuf.Struct output_summary = 11;
+
+  double utility_score = 20;
+  repeated UtilityScoreFactor score_factors = 21;
+
+  google.protobuf.Timestamp started_at = 30;
+  google.protobuf.Timestamp completed_at = 31;
+}
+
+enum ComponentKind {
+  COMPONENT_KIND_UNSPECIFIED = 0;
+  COMPONENT_KIND_CONTEXT_PREPARATION = 1;
+  COMPONENT_KIND_RETRIEVAL_ORCHESTRATION = 2;
+  COMPONENT_KIND_SIGNAL_INTERPRETATION = 3;
+  COMPONENT_KIND_DECISION_ORCHESTRATION = 4;
+  COMPONENT_KIND_RESPONSE_COMPOSITION = 5;
+  COMPONENT_KIND_GOVERNANCE = 6;
+  COMPONENT_KIND_CUSTOM = 100;
+}
+
+message UtilityScoreFactor {
+  string name = 1;
+  double value = 2;
+  string reason = 3;
+}
+
+// =========================
+// Generic Mission Result
+// =========================
+
+message MissionResult {
+  string mission_id = 1;
+  string executive_summary = 2;
+
+  repeated ResultSection sections = 10;
+  repeated Finding findings = 11;
+  repeated Recommendation recommendations = 12;
+
+  repeated EvidenceRef evidence_refs = 20;
+  repeated Citation citations = 21;
+  repeated GovernanceDecision governance_decisions = 22;
+
+  google.protobuf.Struct structured_output = 80;
+  google.protobuf.Struct debug_summary = 90;
+}
+
+message ResultSection {
+  string section_id = 1;
+  string title = 2;
+  string body = 3;
+  int32 order = 4;
+
+  repeated string finding_ids = 10;
+  repeated string recommendation_ids = 11;
+  repeated EvidenceRef evidence_refs = 12;
+
+  google.protobuf.Struct attributes = 90;
+}
+
+message Finding {
+  string finding_id = 1;
+  string title = 2;
+  string summary = 3;
+
+  FindingType type = 10;
+
+  double impact_score = 20;
+  double momentum_score = 21;
+  double confidence_score = 22;
+  double urgency_score = 23;
+  double final_score = 24;
+
+  repeated string related_finding_ids = 30;
+  repeated EvidenceRef evidence_refs = 31;
+
+  google.protobuf.Struct attributes = 90;
+}
+
+enum FindingType {
+  FINDING_TYPE_UNSPECIFIED = 0;
+  FINDING_TYPE_THEME = 1;
+  FINDING_TYPE_CLUSTER = 2;
+  FINDING_TYPE_SIGNAL = 3;
+  FINDING_TYPE_RISK = 4;
+  FINDING_TYPE_OPPORTUNITY = 5;
+  FINDING_TYPE_CONTRADICTION = 6;
+  FINDING_TYPE_TREND = 7;
+  FINDING_TYPE_ANOMALY = 8;
+  FINDING_TYPE_DECISION_POINT = 9;
+}
+
+message Recommendation {
+  string recommendation_id = 1;
+  string title = 2;
+  string recommendation = 3;
+
+  string owner = 10;
+  string priority = 11;
+
+  double impact_score = 20;
+  double confidence_score = 21;
+  double urgency_score = 22;
+  double final_rank_score = 23;
+
+  repeated string linked_finding_ids = 30;
+  repeated EvidenceRef evidence_refs = 31;
+
+  google.protobuf.Struct attributes = 90;
+}
+
+// =========================
+// Evidence / Provenance
+// =========================
+
+message EvidenceRef {
+  string evidence_id = 1;
+  EvidenceSourceType source_type = 2;
+
+  string source_service = 10;
+  string source_id = 11;
+  string source_uri = 12;
+
+  string artifact_id = 20;
+  string object_id = 21;
+  string parent_object_id = 22;
+
+  string location_label = 30;
+  int32 page = 31;
+  string section = 32;
+  string chunk_id = 33;
+
+  string sha256 = 40;
+
+  google.protobuf.Struct attributes = 90;
+}
+
+enum EvidenceSourceType {
+  EVIDENCE_SOURCE_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_SOURCE_TYPE_INPUT_ARTIFACT = 1;
+  EVIDENCE_SOURCE_TYPE_DOCUMENT_CHUNK = 2;
+  EVIDENCE_SOURCE_TYPE_SEARCH_RESULT = 3;
+  EVIDENCE_SOURCE_TYPE_VECTOR_RESULT = 4;
+  EVIDENCE_SOURCE_TYPE_DOMAIN_OBJECT = 5;
+  EVIDENCE_SOURCE_TYPE_GRAPH_OBJECT = 6;
+  EVIDENCE_SOURCE_TYPE_TOOL_RESULT = 7;
+}
+
+message Citation {
+  string citation_id = 1;
+  string label = 2;
+  EvidenceRef evidence_ref = 3;
+  string excerpt = 4;
+}
+
+message GovernanceDecision {
+  string decision_id = 1;
+  string policy_name = 2;
+  string decision = 3;
+  string reason = 4;
+  google.protobuf.Struct attributes = 90;
+}
+
+// =========================
+// Status / Errors
+// =========================
+
+enum MissionStatus {
+  MISSION_STATUS_UNSPECIFIED = 0;
+  MISSION_STATUS_SUBMITTED = 1;
+  MISSION_STATUS_RUNNING = 2;
+  MISSION_STATUS_WAITING_APPROVAL = 3;
+  MISSION_STATUS_FAILED_RETRYABLE = 4;
+  MISSION_STATUS_FAILED_TERMINAL = 5;
+  MISSION_STATUS_COMPLETED = 6;
+  MISSION_STATUS_CANCELLED = 7;
+}
+
+enum MissionPath {
+  MISSION_PATH_UNSPECIFIED = 0;
+  MISSION_PATH_FAST = 1;
+  MISSION_PATH_RESEARCH = 2;
+  MISSION_PATH_REPLAY = 3;
+  MISSION_PATH_FORKED = 4;
+}
+
+enum StepStatus {
+  STEP_STATUS_UNSPECIFIED = 0;
+  STEP_STATUS_QUEUED = 1;
+  STEP_STATUS_LEASED = 2;
+  STEP_STATUS_RUNNING = 3;
+  STEP_STATUS_PAUSED = 4;
+  STEP_STATUS_SUCCEEDED = 5;
+  STEP_STATUS_FAILED_RETRYABLE = 6;
+  STEP_STATUS_FAILED_TERMINAL = 7;
+}
+
+message MissionError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+
+  string failed_stage_id = 10;
+  string failed_step_id = 11;
+  string failed_component_id = 12;
+
+  google.protobuf.Struct details = 90;
 }

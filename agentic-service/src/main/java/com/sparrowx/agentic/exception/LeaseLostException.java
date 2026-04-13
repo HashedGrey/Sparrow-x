@@ -1,5 +1,5 @@
 ﻿package com.sparrowx.agentic.exception;
 
 
-public class ValidationException {
+public class LeaseLostException {
 }
