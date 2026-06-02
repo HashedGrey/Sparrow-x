@@ -102,7 +102,34 @@ The old animation will not be used as the final architecture explanation, but th
 This folder is therefore kept as a reusable visual asset base for the new SparrowX knowledge-base refactor.
 
 ---
+## Render Conversion Workflow
 
+After rendering the animation from After Effects, FFmpeg is used to convert the exported video into optimized GIF/video outputs.
+
+The `speffects/ffmpeg/` folder contains the local conversion workspace:
+
+```text
+speffects/ffmpeg/
+├── ffmpeg.exe
+├── input/
+├── palette/
+└── output/
+```
+
+The workflow is:
+
+```text
+1. Render the animation from After Effects.
+2. Place the rendered video inside speffects/ffmpeg/input/.
+3. Use FFmpeg to generate a color palette for cleaner GIF output.
+4. Store generated palettes inside speffects/ffmpeg/palette/.
+5. Use FFmpeg again to convert the input render into the final GIF/video output.
+6. Store the converted result inside speffects/ffmpeg/output/.
+```
+
+After Effects handles the animation and composition work, while FFmpeg handles the final compression/conversion step. 
+
+---
 ## Current Status
 
 ```text
