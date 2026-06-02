@@ -1,0 +1,17 @@
+Adobe After Effects v25.6.4 Windows 64 render log for project “SP Effects.aep”
+
+Rendering started on 15/02/2026 at 19:03:49
+
+  15/02/2026 19:03:49: Starting composition “node_api_timeline”.
+
+  Output To: D:\Projects\SP Effects\node_api_timeline.mp4    15/02/2026 19:03:50: Finished composition “node_api_timeline”.
+
+
+  15/02/2026 19:03:50: Starting composition “Sparrowx_Architecture”.
+
+  Output To: D:\Projects\SP Effects\Sparrowx_Architecture.mp4    15/02/2026 19:03:57: Finished composition “Sparrowx_Architecture”.
+
+
+  Total Time Elapsed: 8 Seconds
+Log closed on 15/02/2026 at 19:03:57
+
