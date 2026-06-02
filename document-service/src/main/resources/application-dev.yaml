@@ -1,0 +1,86 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
+
+    resource:
+      attributes:
+        service.name: document-service
+        service.version: 1.0.0
+        service.namespace: sparrowx
+        deployment.environment: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+  endpoint:
+    prometheus:
+      access: unrestricted
+
+  metrics:
+    tags:
+      service: document-service
+
+  tracing:
+    sampling:
+      probability: 1.0
+
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+
+  opentelemetry:
+    resource-attributes:
+      service.name: document-service
+      service.version: 1.0.0
+      service.namespace: sparrowx
+      deployment.environment: dev
+
+sparrowx:
+  document:
+    minio:
+      enabled: true
+      endpoint: http://localhost:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket-name: sparrowx-documents
+
+    elasticsearch:
+      enabled: true
+      url: http://localhost:9200
+      index-name: sparrowx-document-chunks
+
+    qdrant:
+      enabled: true
+      url: http://localhost:6333
+      collection-name: sparrowx_document_chunks
+      vector-dimension: 768
+
+    llm:
+      provider: gemini
+      model: gemini-2.5-flash
+      api-key: ${GEMINI_API_KEY}
+      max-output-tokens: 8192
+      temperature: 0.0
+      top-p: 0.95
+      projection-retry-count: 1
+      max-projection-spans: 6
+      max-excerpt-chars: 1200
+      json-repair-enabled: true
+
+    embedding:
+      provider: gemini
+      model: gemini-embedding-001
+      dimension: 768
+      api-key: ${GEMINI_API_KEY}

@@ -1,0 +1,64 @@
+spring:
+  application:
+    name: document-service
+
+  profiles:
+    active: dev
+
+  main:
+    allow-circular-references: false
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    clean-disabled: false
+
+  jpa:
+    entity-packages-to-scan: com.sparrowx.document.data.postgres.entities
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        column_ordering_strategy: legacy
+        physical_naming_strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+        format_sql: false
+    show-sql: false
+    open-in-view: false
+
+server:
+  port: 8081
+
+grpc:
+  server:
+    port: 50054
+
+sparrowx:
+  document:
+    ingestion:
+      worker:
+        enabled: true
+        poll-interval-millis: 1000
+        max-jobs-per-poll: 5
+
+    minio:
+      enabled: true
+      endpoint: http://localhost:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket-name: sparrowx-documents
+
+    elasticsearch:
+      enabled: false
+      index-name: sparrowx-document-chunks
+
+    qdrant:
+      enabled: false
+      collection-name: sparrowx_document_chunks
+      vector-dimension: 384
