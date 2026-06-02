@@ -163,6 +163,6 @@ To refactor:
 
 ## Notes
 
-I have forgotten a lot of the After Effects workflow since creating this, so while I might heavily rely on chatgpt again, I'll now take less than a week.
+I have forgotten a lot of the After Effects workflow since creating this, so while I might heavily rely on chatgpt again, I'll take less than a week this time.
 
 The next version should use this legacy animation as a foundation, but should explain the new SparrowX platform: a knowledge-base-driven enterprise AI system where the Agentic Service orchestrates CRM and Document Service workflows, retrieves grounded evidence, builds DICE graphs, and returns verified answers.
