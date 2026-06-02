@@ -378,7 +378,7 @@ The Document Service is one of the three core SparrowX services:
 ```text
 SparrowX
 ├── Agentic Service
-├── CRM Service
+├── Knowledge-Base Service
 └── Document Service
 ```
 
