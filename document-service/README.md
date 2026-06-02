@@ -1,8 +1,23 @@
 # SparrowX Document Service
 
-The **SparrowX Document Service** is the document intelligence layer for SparrowX. It handles document upload, metadata persistence, object storage, ingestion, text extraction, chunking, keyword indexing, vector indexing, hybrid retrieval, citation verification, and DICE evidence graph generation.
+The **SparrowX Document Service** is the document intelligence layer for SparrowX. It handles document upload, metadata persistence, object storage, ingestion, text extraction, chunking, keyword/vector indexing, hybrid retrieval, citation verification, and **DICE evidence graph generation**.
 
-This service is designed to support enterprise agentic workflows where the Agentic Service needs reliable document evidence, citations, source spans, and structured evidence graphs instead of raw document blobs.
+It supports enterprise agentic workflows where the Agentic Service needs grounded answers with reliable evidence, citations, source spans, and structured reasoning objects instead of raw document blobs.
+
+DICE upgrades the service from simple RAG to **verified document reasoning**. It converts retrieved chunks into **evidence graphs** made of:
+
+```text
+✅ Nodes — document-backed claims, facts, risks, obligations, findings, or entities
+✅ Edges — relationships such as support, dependency, contradiction, sequence, or reference
+✅ Facts — typed evidence objects usable by Embabel reasoning flows
+✅ Actors — components responsible for projecting or building evidence
+✅ Source spans — exact document locations behind each claim
+✅ Verification status — supported, unsupported, partial, or needs more context
+✅ Policies — warnings and checks before evidence is returned
+✅ Compaction — smaller graph responses for APIs, UI timelines, and synthesis
+```
+
+This makes the Document Service the **verified evidence layer** for SparrowX: documents are parsed, indexed, retrieved, converted into graph-structured evidence, verified against source spans, and returned to the Agentic Service for grounded enterprise reasoning.
 
 ---
 
