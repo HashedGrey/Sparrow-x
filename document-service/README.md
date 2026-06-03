@@ -4,7 +4,7 @@ The **SparrowX Document Service** is the document intelligence layer for Sparrow
 
 It supports enterprise agentic workflows where the Agentic Service needs grounded answers with reliable evidence, citations, source spans, and structured reasoning objects instead of raw document blobs.
 
-DICE upgrades the service from simple RAG to **verified document reasoning**. It converts retrieved chunks into **evidence graphs** made of:
+DICE converts retrieved chunks into **evidence graphs** made of:
 
 ```text
 ✅ Nodes — document-backed claims, facts, risks, obligations, findings, or entities
@@ -16,9 +16,6 @@ DICE upgrades the service from simple RAG to **verified document reasoning**. It
 ✅ Policies — warnings and checks before evidence is returned
 ✅ Compaction — smaller graph responses for APIs, UI timelines, and synthesis
 ```
-
-This makes the Document Service the **verified evidence layer** for SparrowX: documents are parsed, indexed, retrieved, converted into graph-structured evidence, verified against source spans, and returned to the Agentic Service for grounded enterprise reasoning.
-
 ---
 
 ## Service Status
@@ -397,6 +394,5 @@ SparrowX
 └── Document Service
 ```
 
-The Agentic Service uses this service when it needs to answer questions grounded in uploaded documents. Instead of returning raw blobs, this service returns structured retrieval evidence, source spans, citations, verification results, and DICE evidence graphs.
 
-This makes the Document Service the evidence layer for SparrowX.
+
