@@ -1,6 +1,5 @@
-package com.sparrowx.document.dice;
+package com.sparrowx.document.evidencegraph;
 
-import com.sparrowx.document.domain.models.DocumentEvidenceNode;
 import com.sparrowx.document.domain.models.SourceSpan;
 import com.sparrowx.document.features.builddocumentevidence.BuildDocumentEvidenceCommand;
 import org.springframework.stereotype.Component;
@@ -8,7 +7,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class NoopDocumentDiceProjectionAdapter implements DocumentDiceProjectionPort {
+public class NoopEvidenceProjectionAdapter implements EvidenceProjectionPort {
 
     @Override
     public ProjectionResult project(

@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice.gemini;
+package com.sparrowx.document.evidencegraph.gemini;
 
 import org.springframework.stereotype.Component;
 

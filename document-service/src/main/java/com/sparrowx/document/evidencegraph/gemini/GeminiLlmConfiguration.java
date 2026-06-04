@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice.gemini;
+package com.sparrowx.document.evidencegraph.gemini;
 
 import com.google.genai.Client;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

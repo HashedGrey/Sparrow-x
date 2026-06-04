@@ -1,7 +1,7 @@
 package com.sparrowx.document.features.builddocumentevidence;
 
 import buildingblocks.core.commands.CommandHandler;
-import com.sparrowx.document.dice.DocumentDiceRuntime;
+import com.sparrowx.document.evidencegraph.DocumentEvidenceRuntime;
 import com.sparrowx.document.exceptions.InvalidDocumentException;
 import com.sparrowx.document.exceptions.RetrievalFailedException;
 import com.sparrowx.document.observability.EvidenceBuildLogger;
@@ -12,14 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class BuildDocumentEvidenceCommandHandler
         implements CommandHandler<BuildDocumentEvidenceCommand, BuildDocumentEvidenceResult> {
 
-    private final DocumentDiceRuntime documentDiceRuntime;
+    private final DocumentEvidenceRuntime documentEvidenceRuntime;
     private final EvidenceBuildLogger evidenceBuildLogger;
 
     public BuildDocumentEvidenceCommandHandler(
-            DocumentDiceRuntime documentDiceRuntime,
+            DocumentEvidenceRuntime documentEvidenceRuntime,
             EvidenceBuildLogger evidenceBuildLogger
     ) {
-        this.documentDiceRuntime = documentDiceRuntime;
+        this.documentEvidenceRuntime = documentEvidenceRuntime;
         this.evidenceBuildLogger = evidenceBuildLogger;
     }
 
@@ -41,7 +41,7 @@ public class BuildDocumentEvidenceCommandHandler
         );
 
         try {
-            BuildDocumentEvidenceResult result = documentDiceRuntime.build(command);
+            BuildDocumentEvidenceResult result = documentEvidenceRuntime.build(command);
 
             evidenceBuildLogger.buildCompleted(
                     command.tenantId(),

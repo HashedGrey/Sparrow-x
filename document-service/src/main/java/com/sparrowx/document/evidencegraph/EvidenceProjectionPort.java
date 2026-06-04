@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice;
+package com.sparrowx.document.evidencegraph;
 
 import com.sparrowx.document.domain.models.DocumentEvidenceNode;
 import com.sparrowx.document.domain.models.SourceSpan;
@@ -6,7 +6,7 @@ import com.sparrowx.document.features.builddocumentevidence.BuildDocumentEvidenc
 
 import java.util.List;
 
-public interface DocumentDiceProjectionPort {
+public interface EvidenceProjectionPort {
 
     ProjectionResult project(
             BuildDocumentEvidenceCommand command,

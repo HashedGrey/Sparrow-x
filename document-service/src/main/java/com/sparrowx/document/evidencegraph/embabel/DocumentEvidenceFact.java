@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice.embabel;
+package com.sparrowx.document.evidencegraph.embabel;
 
 import com.embabel.agent.core.Semantics;
 import com.embabel.agent.core.With;

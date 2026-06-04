@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice;
+package com.sparrowx.document.evidencegraph;
 
 import com.sparrowx.document.domain.models.DocumentEvidenceGraph;
 import com.sparrowx.document.domain.valueobjects.VerificationStatus;
@@ -11,14 +11,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
-public class DocumentDiceRuntime {
+public class DocumentEvidenceRuntime {
 
     private final EvidenceBuildOrchestrator evidenceBuildOrchestrator;
     private final EvidenceGraphVerifier evidenceGraphVerifier;
     private final EvidenceGraphPolicy evidenceGraphPolicy;
     private final EvidenceGraphResponseCompactor responseCompactor;
 
-    public DocumentDiceRuntime(
+    public DocumentEvidenceRuntime(
             EvidenceBuildOrchestrator evidenceBuildOrchestrator,
             EvidenceGraphVerifier evidenceGraphVerifier,
             EvidenceGraphPolicy evidenceGraphPolicy,
@@ -47,6 +47,7 @@ public class DocumentDiceRuntime {
 
             graph = verificationResult.verifiedGraph();
             warnings.addAll(verificationResult.warnings());
+            warnings.add(verificationResult.explanation());
         }
 
         EvidenceGraphPolicy.PolicyResult policyResult =
@@ -54,8 +55,15 @@ public class DocumentDiceRuntime {
 
         warnings.addAll(policyResult.warnings());
 
-        if (!policyResult.acceptable()) {
+        boolean contradicted =
+                graph != null && graph.verificationStatus() == VerificationStatus.CONTRADICTED;
+
+        if (!policyResult.acceptable() && !contradicted) {
             graph = downgradeGraphForPolicyFailure(graph, warnings);
+        }
+
+        if (!policyResult.acceptable() && contradicted) {
+            warnings.add("Evidence graph policy was not acceptable, but CONTRADICTED status was preserved.");
         }
 
         graph = responseCompactor.compact(graph);
@@ -111,7 +119,7 @@ public class DocumentDiceRuntime {
         return warnings.stream()
                 .filter(value -> value != null && !value.isBlank())
                 .distinct()
-                .limit(8)
+                .limit(12)
                 .toList();
     }
 }

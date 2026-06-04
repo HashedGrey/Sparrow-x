@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice.embabel;
+package com.sparrowx.document.evidencegraph.embabel;
 
 public record DocumentEvidenceObject(
         String id,

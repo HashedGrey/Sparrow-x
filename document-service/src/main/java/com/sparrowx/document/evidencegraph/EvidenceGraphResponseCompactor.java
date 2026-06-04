@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice;
+package com.sparrowx.document.evidencegraph;
 
 import com.sparrowx.document.domain.models.DocumentEvidenceEdge;
 import com.sparrowx.document.domain.models.DocumentEvidenceGraph;
@@ -6,9 +6,8 @@ import com.sparrowx.document.domain.models.DocumentEvidenceNode;
 import com.sparrowx.document.domain.models.SourceSpan;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 @Component
 public class EvidenceGraphResponseCompactor {
@@ -16,8 +15,9 @@ public class EvidenceGraphResponseCompactor {
     private static final int MAX_TITLE_CHARS = 100;
     private static final int MAX_SUMMARY_CHARS = 220;
     private static final int MAX_NORMALIZED_TEXT_CHARS = 260;
+    private static final int MAX_EDGE_RATIONALE_CHARS = 260;
     private static final int MAX_EXCERPT_CHARS = 1_200;
-    private static final int MAX_WARNINGS = 8;
+    private static final int MAX_WARNINGS = 12;
 
     public DocumentEvidenceGraph compact(DocumentEvidenceGraph graph) {
         if (graph == null) {
@@ -69,12 +69,12 @@ public class EvidenceGraphResponseCompactor {
                 truncate(node.title(), MAX_TITLE_CHARS),
                 truncate(node.summary(), MAX_SUMMARY_CHARS),
                 truncate(node.normalizedText(), MAX_NORMALIZED_TEXT_CHARS),
-                node.sourceSpanIds(),
+                compactStrings(node.sourceSpanIds(), 24, 120),
                 node.verificationStatus(),
-                node.confidence(),
-                node.coverageScore(),
+                bounded(node.confidence()),
+                bounded(node.coverageScore()),
                 node.requiresSourceContext(),
-                node.tags(),
+                compactStrings(node.tags(), 12, 80),
                 compactWarnings(node.warnings()),
                 node.attributes()
         );
@@ -91,9 +91,9 @@ public class EvidenceGraphResponseCompactor {
                 edge.toNodeId(),
                 edge.relationType(),
                 edge.customRelationType(),
-                truncate(edge.rationale(), 180),
-                edge.sourceSpanIds(),
-                edge.confidence(),
+                truncate(edge.rationale(), MAX_EDGE_RATIONALE_CHARS),
+                compactStrings(edge.sourceSpanIds(), 24, 120),
+                bounded(edge.confidence()),
                 compactWarnings(edge.warnings()),
                 edge.attributes()
         );
@@ -110,8 +110,8 @@ public class EvidenceGraphResponseCompactor {
                 span.documentId(),
                 span.chunkId(),
                 span.claimId(),
-                span.title(),
-                span.fileName(),
+                truncate(span.title(), MAX_TITLE_CHARS),
+                truncate(span.fileName(), MAX_TITLE_CHARS),
                 span.pageStart(),
                 span.pageEnd(),
                 span.citation(),
@@ -128,6 +128,7 @@ public class EvidenceGraphResponseCompactor {
 
         List<String> unique = warnings.stream()
                 .filter(value -> value != null && !value.isBlank())
+                .map(value -> truncate(value, 260))
                 .distinct()
                 .toList();
 
@@ -137,16 +138,33 @@ public class EvidenceGraphResponseCompactor {
 
         List<String> remaining = unique.stream()
                 .filter(value -> !isCriticalDiceWarning(value))
-                .limit(Math.max(0, 8 - critical.size()))
+                .limit(Math.max(0, MAX_WARNINGS - critical.size()))
                 .toList();
 
-        List<String> compact = new java.util.ArrayList<>();
+        List<String> compact = new ArrayList<>();
         compact.addAll(critical);
         compact.addAll(remaining);
 
         return compact.stream()
                 .distinct()
-                .limit(8)
+                .limit(MAX_WARNINGS)
+                .toList();
+    }
+
+    private List<String> compactStrings(
+            List<String> values,
+            int maxItems,
+            int maxChars
+    ) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+
+        return values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> truncate(value, maxChars))
+                .distinct()
+                .limit(maxItems)
                 .toList();
     }
 
@@ -158,7 +176,12 @@ public class EvidenceGraphResponseCompactor {
                 || value.contains("fallback")
                 || value.contains("rejected")
                 || value.contains("json")
-                || value.contains("retry");
+                || value.contains("retry")
+                || value.contains("contradict")
+                || value.contains("unsupported")
+                || value.contains("source span")
+                || value.contains("policy")
+                || value.contains("verification");
     }
 
     private String truncate(String value, int maxChars) {
@@ -173,5 +196,13 @@ public class EvidenceGraphResponseCompactor {
         }
 
         return normalized.substring(0, Math.max(0, maxChars - 3)) + "...";
+    }
+
+    private double bounded(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value) || value < 0.0) {
+            return 0.0;
+        }
+
+        return Math.min(1.0, value);
     }
 }

@@ -41,11 +41,13 @@ public class EvidenceGraphVerifier {
         List<String> unsupportedEdgeIds = new ArrayList<>();
         List<String> warnings = new ArrayList<>(graph.warnings());
 
+        Map<String, VerificationStatus> nodeStatuses = new HashMap<>();
+        Set<String> unsupportedNodeIdSet = new HashSet<>();
+
         double confidenceSum = 0.0;
         int confidenceCount = 0;
         int supportedNodeCount = 0;
-
-        Set<String> unsupportedNodeIdSet = new HashSet<>();
+        int contradictedNodeCount = 0;
 
         for (DocumentEvidenceNode node : graph.nodes()) {
             if (node == null) {
@@ -69,15 +71,21 @@ public class EvidenceGraphVerifier {
             verifiedNodes.add(verifiedNode);
             warnings.addAll(verification.warnings());
 
+            String nodeId = safeId(node.nodeId(), "unknown-node");
+            nodeStatuses.put(nodeId, verification.status());
+
             confidenceSum += verification.confidence();
             confidenceCount++;
 
-            if (verification.status() == VerificationStatus.SUPPORTED
-                    || verification.status() == VerificationStatus.PARTIALLY_SUPPORTED) {
+            if (isSupportedStatus(verification.status())) {
                 supportedNodeCount++;
             } else {
-                unsupportedNodeIds.add(safeId(node.nodeId(), "unknown-node"));
-                unsupportedNodeIdSet.add(safeId(node.nodeId(), "unknown-node"));
+                unsupportedNodeIds.add(nodeId);
+                unsupportedNodeIdSet.add(nodeId);
+            }
+
+            if (verification.status() == VerificationStatus.CONTRADICTED) {
+                contradictedNodeCount++;
             }
         }
 
@@ -91,6 +99,7 @@ public class EvidenceGraphVerifier {
             EdgeVerification edgeVerification = verifyEdge(
                     edge,
                     sourcePool,
+                    nodeStatuses,
                     unsupportedNodeIdSet
             );
 
@@ -112,12 +121,14 @@ public class EvidenceGraphVerifier {
         VerificationStatus graphStatus = graphStatus(
                 graph.nodes().size(),
                 supportedNodeCount,
+                contradictedNodeCount,
                 unsupportedNodeIds,
                 unsupportedEdgeIds
         );
 
         boolean supported =
-                graphStatus != VerificationStatus.UNSUPPORTED
+                isSupportedStatus(graphStatus)
+                        && graphStatus != VerificationStatus.CONTRADICTED
                         && (!requireAllNodesSupported || unsupportedNodeIds.isEmpty())
                         && (!requireAllEdgesSupported || unsupportedEdgeIds.isEmpty());
 
@@ -160,7 +171,8 @@ public class EvidenceGraphVerifier {
                     VerificationStatus.NEEDS_SOURCE_CONTEXT,
                     0.0,
                     0.0,
-                    List.of("Node %s has no source span references.".formatted(safeId(node.nodeId(), "unknown-node")))
+                    List.of("Node %s has no source span references."
+                            .formatted(safeId(node.nodeId(), "unknown-node")))
             );
         }
 
@@ -193,7 +205,8 @@ public class EvidenceGraphVerifier {
                     VerificationStatus.UNSUPPORTED,
                     0.0,
                     0.0,
-                    List.of("Node %s has no verifiable text.".formatted(safeId(node.nodeId(), "unknown-node")))
+                    List.of("Node %s has no verifiable text."
+                            .formatted(safeId(node.nodeId(), "unknown-node")))
             );
         }
 
@@ -203,20 +216,19 @@ public class EvidenceGraphVerifier {
                         evidence
                 );
 
-        VerificationStatus status;
+        VerificationStatus status = result.status();
 
-        if (!result.supported()) {
-            status = VerificationStatus.UNSUPPORTED;
-        } else if (result.confidence() >= 0.75) {
-            status = VerificationStatus.SUPPORTED;
-        } else {
-            status = VerificationStatus.PARTIALLY_SUPPORTED;
-        }
+        double coverageScore = switch (status) {
+            case SUPPORTED -> 1.0;
+            case PARTIALLY_SUPPORTED -> Math.max(0.1, Math.min(0.99, result.confidence()));
+            case CONTRADICTED -> 0.0;
+            case UNSUPPORTED, NEEDS_SOURCE_CONTEXT, UNVERIFIED, UNSPECIFIED -> 0.0;
+        };
 
         return new NodeVerification(
                 status,
                 result.confidence(),
-                result.confidence(),
+                coverageScore,
                 List.of(result.explanation())
         );
     }
@@ -224,17 +236,36 @@ public class EvidenceGraphVerifier {
     private EdgeVerification verifyEdge(
             DocumentEvidenceEdge edge,
             Map<String, SourceSpan> sourcePool,
+            Map<String, VerificationStatus> nodeStatuses,
             Set<String> unsupportedNodeIds
     ) {
         List<String> warnings = new ArrayList<>();
+
+        String edgeId = safeId(edge.edgeId(), "unknown-edge");
 
         boolean endpointsPresent =
                 edge.fromNodeId() != null && !edge.fromNodeId().isBlank()
                         && edge.toNodeId() != null && !edge.toNodeId().isBlank();
 
-        boolean endpointsSupported =
-                !unsupportedNodeIds.contains(edge.fromNodeId())
-                        && !unsupportedNodeIds.contains(edge.toNodeId());
+        VerificationStatus fromStatus = nodeStatuses.get(edge.fromNodeId());
+        VerificationStatus toStatus = nodeStatuses.get(edge.toNodeId());
+
+        boolean endpointsKnown =
+                fromStatus != null && toStatus != null;
+
+        boolean endpointsSupported;
+
+        if (edge.relationType() == DocumentEvidenceEdge.EvidenceRelationType.CONTRADICTS) {
+            endpointsSupported = endpointsKnown
+                    && !isHardMissingStatus(fromStatus)
+                    && !isHardMissingStatus(toStatus);
+        } else {
+            endpointsSupported = endpointsKnown
+                    && isSupportedStatus(fromStatus)
+                    && isSupportedStatus(toStatus)
+                    && !unsupportedNodeIds.contains(edge.fromNodeId())
+                    && !unsupportedNodeIds.contains(edge.toNodeId());
+        }
 
         boolean hasSourceSupport =
                 edge.sourceSpanIds() != null
@@ -242,14 +273,16 @@ public class EvidenceGraphVerifier {
                         .stream()
                         .anyMatch(sourcePool::containsKey);
 
-        String edgeId = safeId(edge.edgeId(), "unknown-edge");
-
         if (!endpointsPresent) {
             warnings.add("Edge %s has missing endpoint ids.".formatted(edgeId));
         }
 
+        if (!endpointsKnown) {
+            warnings.add("Edge %s references unknown node id(s).".formatted(edgeId));
+        }
+
         if (!endpointsSupported) {
-            warnings.add("Edge %s references unsupported node(s).".formatted(edgeId));
+            warnings.add("Edge %s references unsupported or incompatible node(s).".formatted(edgeId));
         }
 
         if (!hasSourceSupport) {
@@ -257,7 +290,7 @@ public class EvidenceGraphVerifier {
         }
 
         return new EdgeVerification(
-                endpointsPresent && endpointsSupported && hasSourceSupport,
+                endpointsPresent && endpointsKnown && endpointsSupported && hasSourceSupport,
                 warnings
         );
     }
@@ -326,11 +359,16 @@ public class EvidenceGraphVerifier {
     private VerificationStatus graphStatus(
             int totalNodes,
             int supportedNodeCount,
+            int contradictedNodeCount,
             List<String> unsupportedNodeIds,
             List<String> unsupportedEdgeIds
     ) {
         if (totalNodes == 0) {
             return VerificationStatus.UNSUPPORTED;
+        }
+
+        if (contradictedNodeCount > 0) {
+            return VerificationStatus.CONTRADICTED;
         }
 
         if (unsupportedNodeIds.isEmpty() && unsupportedEdgeIds.isEmpty()) {
@@ -344,12 +382,28 @@ public class EvidenceGraphVerifier {
         return VerificationStatus.UNSUPPORTED;
     }
 
+    private boolean isSupportedStatus(VerificationStatus status) {
+        return status == VerificationStatus.SUPPORTED
+                || status == VerificationStatus.PARTIALLY_SUPPORTED;
+    }
+
+    private boolean isHardMissingStatus(VerificationStatus status) {
+        return status == VerificationStatus.UNSPECIFIED
+                || status == VerificationStatus.UNVERIFIED
+                || status == VerificationStatus.NEEDS_SOURCE_CONTEXT;
+    }
+
     private String explanation(
             boolean supported,
             VerificationStatus status,
             List<String> unsupportedNodeIds,
             List<String> unsupportedEdgeIds
     ) {
+        if (status == VerificationStatus.CONTRADICTED) {
+            return "Evidence graph is contradicted by the supplied source pool. contradictedOrUnsupportedNodes=%s unsupportedEdges=%s"
+                    .formatted(unsupportedNodeIds, unsupportedEdgeIds);
+        }
+
         if (supported) {
             return "Evidence graph is supported by the supplied source pool.";
         }

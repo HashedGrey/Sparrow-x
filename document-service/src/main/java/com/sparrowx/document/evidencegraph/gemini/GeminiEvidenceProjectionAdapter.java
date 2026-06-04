@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice.gemini;
+package com.sparrowx.document.evidencegraph.gemini;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,21 +9,23 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Part;
 import com.google.genai.types.Schema;
 import com.google.genai.types.Type;
-import com.sparrowx.document.dice.DocumentDiceProjectionPort;
+import com.sparrowx.document.domain.models.DocumentEvidenceGraph;
 import com.sparrowx.document.domain.models.DocumentEvidenceNode;
 import com.sparrowx.document.domain.models.SourceSpan;
 import com.sparrowx.document.domain.valueobjects.VerificationStatus;
+import com.sparrowx.document.evidencegraph.EvidenceProjectionPort;
 import com.sparrowx.document.features.builddocumentevidence.BuildDocumentEvidenceCommand;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Primary
 @Component
-public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjectionPort {
+public class GeminiEvidenceProjectionAdapter implements EvidenceProjectionPort {
 
     private final Client geminiClient;
     private final GeminiLlmProperties properties;
@@ -32,7 +34,7 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
     private final GeminiProjectionPromptBuilder promptBuilder;
     private final GeminiProjectionResponseValidator responseValidator;
 
-    public GeminiDocumentDiceProjectionAdapter(
+    public GeminiEvidenceProjectionAdapter(
             Client geminiClient,
             GeminiLlmProperties properties,
             ObjectMapper objectMapper,
@@ -60,16 +62,22 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
             );
         }
 
-        List<String> warnings = new java.util.ArrayList<>();
+        List<String> warnings = new ArrayList<>();
 
-        int attempts = Math.max(1, properties.projectionRetryCount() + 1);
+        int attempts = attempts(command);
 
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
                 ProjectionResult result = tryProject(command, sourceSpans, attempt > 1);
                 warnings.addAll(result.warnings());
 
-                if (!result.nodes().isEmpty() && !hasMissingRequestedNodeTypeWarning(result.warnings())) {
+                boolean usable = !result.nodes().isEmpty();
+
+                if (usable && shouldAcceptDespiteMissingTypes(command, result.warnings())) {
+                    return new ProjectionResult(result.nodes(), warnings);
+                }
+
+                if (usable && !hasMissingRequestedNodeTypeWarning(result.warnings())) {
                     return new ProjectionResult(result.nodes(), warnings);
                 }
 
@@ -80,6 +88,31 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
         }
 
         return new ProjectionResult(List.of(), warnings);
+    }
+
+    private int attempts(BuildDocumentEvidenceCommand command) {
+        if (command != null
+                && command.spec() != null
+                && command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+            return 1;
+        }
+
+        return Math.max(1, properties.projectionRetryCount() + 1);
+    }
+
+    private boolean shouldAcceptDespiteMissingTypes(
+            BuildDocumentEvidenceCommand command,
+            List<String> warnings
+    ) {
+        if (command == null || command.spec() == null) {
+            return false;
+        }
+
+        if (command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+            return true;
+        }
+
+        return !hasMissingRequestedNodeTypeWarning(warnings);
     }
 
     private ProjectionResult tryProject(
@@ -96,7 +129,7 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
                 .maxOutputTokens(properties.maxOutputTokens())
                 .temperature((float) properties.temperature())
                 .topP((float) properties.topP())
-                .systemInstruction(Content.fromParts(Part.fromText(systemInstruction())))
+                .systemInstruction(Content.fromParts(Part.fromText(systemInstruction(command))))
                 .build();
 
         GenerateContentResponse response = geminiClient.models.generateContent(
@@ -124,7 +157,7 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
         GeminiProjectionResponseValidator.ValidationResult validation =
                 responseValidator.validate(command, nodes, sourceSpans);
 
-        List<String> warnings = new java.util.ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         warnings.addAll(parsed.warnings());
         warnings.addAll(validation.warnings());
 
@@ -238,7 +271,20 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
                 .build();
     }
 
-    private String systemInstruction() {
+    private String systemInstruction(BuildDocumentEvidenceCommand command) {
+        String contradictionInstruction = "";
+
+        if (command != null
+                && command.spec() != null
+                && command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+            contradictionInstruction = """
+                    For contradiction detection, do not answer the user claim directly.
+                    Do not restate the tested claim as a supported source claim.
+                    Only extract source-backed evidence nodes.
+                    The deterministic orchestrator will insert the tested claim separately.
+                    """;
+        }
+
         return """
                 You are the Document DICE projection layer inside SparrowX Document Service.
                 You only normalize retrieved document spans into compact typed evidence nodes.
@@ -246,7 +292,8 @@ public class GeminiDocumentDiceProjectionAdapter implements DocumentDiceProjecti
                 Every claim must be grounded in supplied source spans.
                 Keep normalizedText short and source-near.
                 Do not copy full excerpts.
-                """;
+                %s
+                """.formatted(contradictionInstruction);
     }
 
     private DocumentEvidenceNode.EvidenceNodeType toNodeType(String value) {

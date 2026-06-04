@@ -1,4 +1,4 @@
-package com.sparrowx.document.dice;
+package com.sparrowx.document.evidencegraph;
 
 import com.sparrowx.document.domain.models.DocumentEvidenceGraph;
 import com.sparrowx.document.domain.models.DocumentEvidenceNode;
@@ -25,7 +25,9 @@ public class EvidenceGraphPolicy {
             "has", "have", "having", "in", "into", "is", "it", "its", "of",
             "on", "or", "that", "the", "their", "this", "to", "used", "using",
             "was", "were", "with", "show", "shows", "find", "evidence",
-            "study", "linking", "linked", "cause", "causes", "caused"
+            "study", "linking", "linked", "cause", "causes", "caused",
+            "supports", "support", "contradicts", "contradict", "claim",
+            "whether", "document"
     );
 
     public PolicyResult evaluate(
@@ -43,6 +45,11 @@ public class EvidenceGraphPolicy {
             warnings.add("Evidence graph has no nodes.");
         }
 
+        if (command == null || command.spec() == null) {
+            warnings.add("Build command or evidence spec is missing.");
+            return new PolicyResult(false, warnings);
+        }
+
         if (command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.UNSPECIFIED) {
             warnings.add("Evidence goal is unspecified.");
         }
@@ -58,6 +65,10 @@ public class EvidenceGraphPolicy {
 
         if (graph.verificationStatus() == VerificationStatus.NEEDS_SOURCE_CONTEXT) {
             warnings.add("Evidence graph verification status needs source context.");
+        }
+
+        if (graph.verificationStatus() == VerificationStatus.CONTRADICTED) {
+            warnings.add("Evidence graph verification status is contradicted.");
         }
 
         for (DocumentEvidenceNode node : graph.nodes()) {
@@ -78,6 +89,10 @@ public class EvidenceGraphPolicy {
                 warnings.add("Node %s is unsupported.".formatted(node.nodeId()));
             }
 
+            if (node.verificationStatus() == VerificationStatus.CONTRADICTED) {
+                warnings.add("Node %s is contradicted.".formatted(node.nodeId()));
+            }
+
             if (node.verificationStatus() == VerificationStatus.NEEDS_SOURCE_CONTEXT) {
                 warnings.add("Node %s needs source context.".formatted(node.nodeId()));
             }
@@ -90,10 +105,25 @@ public class EvidenceGraphPolicy {
         IntentRelevanceResult intentRelevance = evaluateIntentRelevance(command, graph);
         warnings.addAll(intentRelevance.warnings());
 
+        boolean contradictionGoal =
+                command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION;
+
+        boolean acceptableVerificationStatus;
+
+        if (contradictionGoal) {
+            acceptableVerificationStatus =
+                    graph.verificationStatus() != VerificationStatus.UNSUPPORTED
+                            && graph.verificationStatus() != VerificationStatus.NEEDS_SOURCE_CONTEXT;
+        } else {
+            acceptableVerificationStatus =
+                    graph.verificationStatus() != VerificationStatus.UNSUPPORTED
+                            && graph.verificationStatus() != VerificationStatus.NEEDS_SOURCE_CONTEXT
+                            && graph.verificationStatus() != VerificationStatus.CONTRADICTED;
+        }
+
         boolean acceptable = !graph.nodes().isEmpty()
                 && graph.missingNodeTypes().isEmpty()
-                && graph.verificationStatus() != VerificationStatus.UNSUPPORTED
-                && graph.verificationStatus() != VerificationStatus.NEEDS_SOURCE_CONTEXT
+                && acceptableVerificationStatus
                 && intentRelevance.acceptable();
 
         return new PolicyResult(acceptable, warnings);
@@ -104,6 +134,11 @@ public class EvidenceGraphPolicy {
             DocumentEvidenceGraph graph
     ) {
         List<String> warnings = new ArrayList<>();
+
+        if (command == null || command.buildContext() == null || command.spec() == null) {
+            warnings.add("No command context was available for evidence relevance checking.");
+            return new IntentRelevanceResult(false, 0.0, List.of(), List.of(), warnings);
+        }
 
         Set<String> intentTerms = buildIntentTerms(command);
 
@@ -159,45 +194,58 @@ public class EvidenceGraphPolicy {
     private Set<String> buildIntentTerms(BuildDocumentEvidenceCommand command) {
         Set<String> terms = new LinkedHashSet<>();
 
+        if (command == null || command.buildContext() == null || command.spec() == null) {
+            return terms;
+        }
+
         addStructuredTerms(terms, command.buildContext().topics());
         addStructuredTerms(terms, command.buildContext().entityNames());
         addStructuredTerms(terms, command.buildContext().keywords());
 
-        addStructuredTerms(terms, List.of(command.buildContext().retrievalHint()));
-        addStructuredTerms(terms, List.of(command.spec().customGoal()));
+        addStructuredTerm(terms, command.buildContext().retrievalHint());
+        addStructuredTerm(terms, command.spec().customGoal());
 
         Map<String, String> options = command.spec().options();
+
         if (options != null) {
-            addStructuredTerms(terms, List.of(options.get("focus")));
+            addStructuredTerm(terms, options.get("focus"));
+            addStructuredTerm(terms, options.get("target_claim"));
+            addStructuredTerm(terms, options.get("tested_claim"));
+            addStructuredTerm(terms, options.get("claim"));
+            addStructuredTerm(terms, options.get("proposition"));
         }
 
         return terms;
     }
 
     private void addStructuredTerms(Set<String> terms, List<String> values) {
-        if (values == null) {
+        if (values == null || values.isEmpty()) {
             return;
         }
 
         for (String value : values) {
-            if (value == null || value.isBlank()) {
-                continue;
-            }
+            addStructuredTerm(terms, value);
+        }
+    }
 
-            String normalized = normalizeForMatching(value);
+    private void addStructuredTerm(Set<String> terms, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
 
-            if (normalized.isBlank()) {
-                continue;
-            }
+        String normalized = normalizeForMatching(value);
 
-            if (isUsefulIntentPhrase(normalized)) {
-                terms.add(normalized);
-            }
+        if (normalized.isBlank()) {
+            return;
+        }
 
-            for (String token : normalized.split("\\s+")) {
-                if (isUsefulIntentToken(token)) {
-                    terms.add(token);
-                }
+        if (isUsefulIntentPhrase(normalized)) {
+            terms.add(normalized);
+        }
+
+        for (String token : normalized.split("\\s+")) {
+            if (isUsefulIntentToken(token)) {
+                terms.add(token);
             }
         }
     }
@@ -302,6 +350,8 @@ public class EvidenceGraphPolicy {
 
         return value
                 .toLowerCase(Locale.ROOT)
+                .replace("mind-wandering", "mind wandering")
+                .replace("mindwandering", "mind wandering")
                 .replaceAll("[^a-z0-9+\\-\\s]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
