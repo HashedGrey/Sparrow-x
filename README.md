@@ -8,6 +8,7 @@
 *Animated service-to-service data flow inside the Sparrowx mesh.*
 
 
+
 SparrowX is an internal knowledge and agentic search system for engineering organizations. 
 It connects company documents, service ownership, onboarding workflows, runbooks, 
 repositories and internal domain data into one searchable, explainable assistant.
@@ -133,9 +134,9 @@ Consider SparrowX the compass that points to your team's true north.
 
 | Feature          | Dormant | In Progress | Completed |
 |------------------|---------|-------------|-----------|
-| API Gateway      |        |      ✅       |           |
-| Agentic Service  |    ✅    |             |           |
-| Building Blocks  |         |    ✅        |            |
+| API Gateway      |   ✅     |             |           |
+| Agentic Service  |        |      ✅       |           |
+| Building Blocks  |         |            |     ✅       |
 | Document Service |        |             |       ✅    |
 | Internal Service |        |             |      ✅     |
 
