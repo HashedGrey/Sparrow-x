@@ -7,7 +7,6 @@
 
 *Animated service-to-service data flow inside the Sparrowx mesh.*
 
-# SparrowX
 
 SparrowX is an internal knowledge and agentic search system for engineering organizations. 
 It connects company documents, service ownership, onboarding workflows, runbooks, 
