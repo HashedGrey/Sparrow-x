@@ -1,0 +1,40 @@
+package com.sparrowx.internal.valueobjects;
+
+public enum InternalGraphNodeType {
+    COMPANY,
+    ENGINEER,
+    TEAM,
+    MODULE,
+    REPOSITORY,
+    DOCUMENT,
+    RUNBOOK,
+    ONBOARDING_PATH,
+    ONBOARDING_TASK,
+    ONBOARDING_ASSIGNMENT,
+    PERMISSION,
+    LEARNING_TOPIC,
+    LEARNING_OBJECTIVE;
+
+    public static InternalGraphNodeType from(String value) {
+        if (value == null || value.isBlank()) {
+            return MODULE;
+        }
+
+        return switch (value.trim().toUpperCase()) {
+            case "INTERNAL_GRAPH_NODE_TYPE_COMPANY", "COMPANY" -> COMPANY;
+            case "INTERNAL_GRAPH_NODE_TYPE_ENGINEER", "ENGINEER" -> ENGINEER;
+            case "INTERNAL_GRAPH_NODE_TYPE_TEAM", "TEAM" -> TEAM;
+            case "INTERNAL_GRAPH_NODE_TYPE_MODULE", "MODULE" -> MODULE;
+            case "INTERNAL_GRAPH_NODE_TYPE_REPOSITORY", "REPOSITORY" -> REPOSITORY;
+            case "INTERNAL_GRAPH_NODE_TYPE_DOCUMENT", "DOCUMENT" -> DOCUMENT;
+            case "INTERNAL_GRAPH_NODE_TYPE_RUNBOOK", "RUNBOOK" -> RUNBOOK;
+            case "INTERNAL_GRAPH_NODE_TYPE_ONBOARDING_PATH", "ONBOARDING_PATH" -> ONBOARDING_PATH;
+            case "INTERNAL_GRAPH_NODE_TYPE_ONBOARDING_TASK", "ONBOARDING_TASK" -> ONBOARDING_TASK;
+            case "INTERNAL_GRAPH_NODE_TYPE_ONBOARDING_ASSIGNMENT", "ONBOARDING_ASSIGNMENT" -> ONBOARDING_ASSIGNMENT;
+            case "INTERNAL_GRAPH_NODE_TYPE_PERMISSION", "PERMISSION" -> PERMISSION;
+            case "INTERNAL_GRAPH_NODE_TYPE_LEARNING_TOPIC", "LEARNING_TOPIC" -> LEARNING_TOPIC;
+            case "INTERNAL_GRAPH_NODE_TYPE_LEARNING_OBJECTIVE", "LEARNING_OBJECTIVE" -> LEARNING_OBJECTIVE;
+            default -> MODULE;
+        };
+    }
+}
