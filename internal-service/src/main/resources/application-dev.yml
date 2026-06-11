@@ -1,0 +1,51 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: internal-service
+      auto-offset-reset: earliest
+    producer:
+      acks: all
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
+
+otel:
+  exporter:
+    otlp:
+      endpoint: http://localhost:4317
+
+  resource:
+    attributes:
+      service.name: internal-service
+      service.version: 1.0.0
+      service.namespace: sparrowx
+      deployment.environment: dev
+
+sparrowx:
+  internal:
+    neo4j:
+      uri: bolt://localhost:7687
+      username: neo4j
+      password: password
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: unrestricted
+  metrics:
+    tags:
+      service: internal-service
