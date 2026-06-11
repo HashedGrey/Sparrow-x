@@ -1,10 +1,7 @@
 package com.sparrowx.apigateway.features.agentic;
 
 import buildingblocks.core.queries.QueryBus;
-import com.sparrowx.apigateway.dtos.AgenticRequestDto;
-import com.sparrowx.apigateway.dtos.AgenticResultDto;
 import com.sparrowx.apigateway.features.agentic.query.AgenticQuery;
-import com.sparrowx.apigateway.mappers.AgenticGatewayMapper;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,10 +27,10 @@ public class AgenticController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<AgenticResultDto> query(@RequestBody AgenticRequestDto requestDto) {
         // Map REST -> QueryBus query
-        AgenticQuery agenticQuery = agenticGatewayMapper.toAgenticQuery(requestDto);
+        AgenticQuery agenticQuery = agenticGatewayMapper.toQuery(requestDto);
 
         // Send to QueryBus
-        AgenticResultDto agenticResultDto = queryBus.send(agenticQuery);
+        AgenticResultDto agenticResultDto = queryBus.dispatch(agenticQuery);
 
         return ResponseEntity.ok(agenticResultDto);
     }

@@ -1,8 +1,31 @@
 spring:
+  application:
+    name: api-gateway
   profiles:
     active: dev
-  application:
-    name: api.gateway
 
-server:
-  port: 8081
+  main:
+    allow-circular-references: false
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+#
+#grpc:
+#  client:
+#    profile-service:
+#      address: profile-service
+#      port: 50051
+#    tweet-service:
+#      address: tweet-service
+#      port: 50052
+#    timeline-service:
+#      address: timeline-service
+#      port: 50053
+#    search-service:
+#      address: search-service
+#      port: 50054
+#    agentic-service:
+#      address: agentic-service
+#      port: 50055

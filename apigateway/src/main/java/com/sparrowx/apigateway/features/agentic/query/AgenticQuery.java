@@ -1,7 +1,7 @@
 package com.sparrowx.apigateway.features.agentic.query;
 
-import buildingblocks.core.queries.IQuery;
-import com.sparrowx.apigateway.dtos.AgenticResultDto;
+import buildingblocks.core.queries.Query;
+import com.sparrowx.apigateway.features.agentic.AgenticResultDto;
 
 
 public record AgenticQuery(
@@ -9,5 +9,5 @@ public record AgenticQuery(
         String prompt
         //private Integer maxTokens;
         //private Double temperature;
-) implements IQuery<AgenticResultDto> {
+) implements Query<AgenticResultDto> {
 }

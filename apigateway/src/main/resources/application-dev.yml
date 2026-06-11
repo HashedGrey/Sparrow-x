@@ -1,6 +1,7 @@
 spring:
   application:
-    name: api.gateway
+    name: api-gateway
+
   threads:
     virtual:
       enabled: true
@@ -24,4 +25,19 @@ spring:
                 - TokenRelay
 
 server:
-  port: 8081
+  port: 8080
+
+grpc:
+  server:
+    enabled: false
+  debug:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      service: api-gateway
