@@ -7,117 +7,137 @@
 
 *Animated service-to-service data flow inside the Sparrowx mesh.*
 
-A distributed-systems playground where the flagship feature is Agentic Context Engineering, which ingests realistic social-network signals—profiles, follows, replies, reposts, likes and link-outs to long-form artifacts (PDFs in MinIO) and turns them into goal-driven LLM workflows for queries, insights, and experiments.
+# SparrowX
 
-The Twitter clone is intentionally “just the substrate,” mirrored from Grok’s premise: At large scale, a stream of hundreds of millions of daily interactions that makes the network feel like a second-generation directory of human knowledge. Sparrowx distills that same idea into an accessible MVP that's useful for junior devs learning bottom-up (how each service and data flow works), and for senior engineers coming from other stacks learning top-down (how the platform behaves end-to-end).
+SparrowX is an internal knowledge and agentic search system for engineering organizations. 
+It connects company documents, service ownership, onboarding workflows, runbooks, 
+repositories and internal domain data into one searchable, explainable assistant.
 
-Under the hood, Sparrowx is goal-oriented and OODA-looped. Every request is framed as a concrete objective (eg. “find high-signal researchers,” “verify claims against PDFs,” “summarize contradictions,” “recommend accounts to follow”). The system then runs an Observe → Orient → Decide → Act cycle: it observes live social signals and retrieved documents, orients by building context (embeddings + metadata + reputation/engagement features), decides on the next best action (retrieve, rerank, validate, call a tool, expand search, generate a report), and acts, executing those steps via an action registry/tooling layer until the goal is met or budgets/timeouts are reached.
+The goal is to make SparrowX behave like an internal engineering brain: A system that can
+answer questions, find context, guide new engineers and reason across structured and 
+unstructured company data.
 
+>Crucially, this brain is completely self-referential. The moment it is deployed, 
+SparrowX indexes its own codebase, system architecture and onboarding paths.  
+Incoming developers use the platform itself to learn exactly how to build, scale, 
+and navigate an agentic orchestration system.
 
->*"Hey Chat, Given the following PDFs:*  
->*• Apple Smart Glasses Narrative, Trust, and Adoption Brief.pdf .*  
->*• Ambient Computing Use Cases and Daily-Life Integration Brief.pdf *  
-> 
->*Search the Social Signal Source Services(Search, Tweet & Profile) for weak and strong signals around Apple smart glasses, including emerging demand,
-> privacy anxiety, wearability objections, ecosystem-fit questions, comparison-driven hesitation, and daily-life use-case 
-> fit. Cluster related tweets and thread branches into narratives. Examine engagement dynamics to distinguish passing 
-> chatter from durable momentum and use profile relationships only where community-specific amplification or segment migration 
-> needs tracing. Determine which narratives reflect early curiosity, which reflect practical adoption intent, which 
-> reflect trust or social-acceptability risk and which are most likely to influence launch adoption or brand trust. *
-> Then rank intervention opportunities for marketing, PR, product, and trust teams by impact, momentum, confidence, 
-> and time sensitivity"*
+## Core Services
 
+SparrowX is built around three core services:
 
-### This kind of high-stakes query is the sort of thing data-ingestion and signal-digestion platforms like [Sprinklr](https://www.sprinklr.com/) use for large enterprises.
+* **agenticsvc** - The orchestration layer that receives user missions, parses intent, plans tool calls, invokes internal services, coordinates agent execution, and produces grounded answers.
 
-The tweet service is only a high-signal demo data source and the agentic layer itself source-agnostic. Any data source
-(PDFs, logs, EHRs, CRM records, telemetry) can be ingested as context blocks, embedded, and processed through the same
-Observe → Orient → Decide → Act workflow. Replacing tweets simply requires a connector that exposes documents + metadata
-to the RAG layer, allowing the agentic service to operate across multiple enterprise domains, listed below:
+* **intsvc** - The structured internal system that stores teams, engineers, services, onboarding paths, tasks, ownership, service metadata, and internal business/domain entities.
 
+* **docsvc** - The document intelligence layer that handles document upload, extraction, chunking, hybrid retrieval, vector search, keyword search, citation verification, and evidence graph construction.
 
+* **bb** - The shared building-blocks foundation. It provides reusable infrastructure used 
+across SparrowX services, including command/query handling, validation, observability,
+tracing, metrics, exception handling, context propagation, resilience patterns, and 
+common domain primitives. Non-executable library that keeps `agenticsvc`, `intsvc`, and `docsvc` consistent.
 
-### Finance / Risk & Compliance
-
->*"Search the Financial Risk Verification Service for signals of hidden exposure, concentration risk, liquidity stress, 
-> counterparty fragility, abnormal trading behavior, deteriorating assumptions, and regime shift. Correlate disclosures, 
-> internal risk metrics, anomaly logs, model outputs, analyst notes and market data to infer where the institution may 
-> be more vulnerable than current reporting suggests. Identify likely propagation paths and time-sensitive stress windows 
-> and rank risk scenarios and recommended human actions by exposure size, confidence, urgency, and potential downstream loss."
-> 
->#### Financial Risk Verification Service:  
->#### Banks, hedge funds, and fintech compliance teams.
-
-### Healthcare / Clinical Research
-
->*"Search the Clinical Safety Verification Service for signals of elevated patient risk, adverse drug interactions, 
-> subgroup-specific harm, protocol-sensitive deterioration, unexpected outcome patterns, and emerging contraindications. 
-> Correlate protocols, EHR notes, medication histories, labs, pharmacovigilance reports, and clinician observations to 
-> infer where care is becoming unsafe before it is formally recognized. Identify likely causal paths and time-sensitive 
-> intervention windows and rank safety scenarios and recommended human actions by severity, confidence, urgency, and 
-> potential downstream harm."
->
->#### Clinical Safety Intelligence Service
->#### Pharmaceutical, biotech, and hospital research networks.
+## What SparrowX Can Do
 
 
+### 1. Engineering Knowledge Discovery
 
- ### Cybersecurity / Threat Intelligence / Defensive Ops
+**Example multi-hop query:**
 
->Query  
->*"Continuously discover and refine high-value adversary target hypotheses by correlating infrastructure fingerprints,
-> ownership indicators, exposure data, identity posture, trust relationships, historical incidents, and analyst notes.  
-> Identify exploitable conditions and likely pivot paths and detect short-lived operational windows caused by environmental
-> change. Rank target-action opportunities for human operators by mission value, feasibility, confidence, and likely
-> downstream leverage."
->
-> Purpose  
-> They are looking inside the SecOps Source Service for targeting and exposure signals. Things like infrastructure
-> fingerprints, asset records, DNS and certificate data, service banners, vulnerability findings, identity and trust
-> relationships, detections, incident threads, analyst notes, malware/TTP links, telemetry, and historical case
-> artifacts. These data variations help them determine what belongs to a relevant adversary, where it is weak,
-> how it may be accessed or traversed, and how valuable it is operationally. The data is then used to build target
-> hypotheses, rank exploit or investigation paths, and generate decision-support recommendations for human operators.
->#### Service - SecOps Source Service:
->#### Military Contractors, Private Security Firms.
+> “For the Agentic Orchestrator service, find the latest architecture documents, 
+> identify the owning teams and primary engineers, list the related repositories, 
+> summarize recent pull-requests or deployments affecting it, and tell me which runbooks 
+> should be used if latency increases during agent execution.”
 
-## Goals Of This Project
-- 🔹 Using Agentic Context Engineering: The system decomposes a user goal into retrieval and reasoning actions, dynamically combining hyper-search over tweets, relationship-aware lookups, and vector-based semantic recall; all expressed through natural-language intent rather than fixed queries. 
-    i.e. Goal → Observe signals → Expand context → Validate evidence → Synthesize output
-- 🔹 Using Vertical Slice Architecture for architecture level.
-- 🔹 Using Spring MVC as a Web Framework.
-- 🔹 Using Domain Driven Design (DDD) to implement all business processes in microservices.
-- 🔹 Using Spring Kafka  on top of Kafka for Event Driven Architecture between our microservices.
-- 🔹 Using gRPC for internal communication between our microservices.
-- 🔹 Using CQRS implementation with a Mediator library.
-- 🔹 Using Spring Data JPA for data persistence and ORM in write side with Postgres.
-- 🔹 Using Spring Data Cassandra for data persistence and ORM in read side with CassandraDB.
-- 🔹 Using Spring Data Neo4j for graph-based queries, social graph traversal, and recommendation logic.
-- 🔹 Using Inbox Pattern for ensuring message idempotency for receiver and Exactly once Delivery.
-- 🔹 Using Outbox Pattern for ensuring no message is lost and there is at At Least One Delivery.
-- 🔹 Using Unit Testing for testing small units and mocking our dependencies with Mockito.
-- 🔹 Using End-To-End Testing and Integration Testing for testing features with all dependencies using testcontainers.
-- 🔹 Using Spring Validator and a Validation Pipeline Behavior on top of Mediator.
-- 🔹 Using Springdoc Openapi for generating OpenAPI documentation in Spring Boot.
-- 🔹 Using OpenTelemetry Collector for collecting Metrics, Tracings, and Structured Logs.
-- 🔹 Using Loki for Logging.
-- 🔹 Using Tempo for Distributed Tracing.
-- 🔹 Using Prometheus and Grafana for monitoring.
-- 🔹 Using Keycloak for authentication and authorization based on OpenID-Connect and OAuth2.
-- 🔹 Using Spring Cloud Gateway MVC as a Microservices' gateway.
+**Expected SparrowX execution:**
+
+* **`intsvc`** resolves the target services, owning teams, associated engineers, and core service metadata.
+* **`docsvc`** searches the vector index for technical documents, repository READMEs, and relevant runbooks.
+* **`agenticsvc`** correlates teams ownership, repository context, recent pull_requests, active deployments, and runbooks evidence into a single, fully cited response.
+
+### 2. Company Intranet / Internal Search
+
+**Example multi-hop query:**
+
+> “Find the current documents for production deployments, then compare them against the Agentic Orchestrator service documents and runbooks to tell me whether the service follows the approved deployment processes.”
+
+**Expected SparrowX execution:**
+
+* **`docsvc`** retrieves global deployment standards, engineering documents, and service-specific runbooks.
+* **`intsvc`** identifies the specific services, code repositories, and structural metadata.
+* **`agenticsvc`** evaluates the deployment process requirements against the service's historical deployments and active documents to return gaps, evidence, and compliance updates.
+
+### 3. Onboarding
+
+**Example multi-hop query:**
+
+> “For a new backend engineer joining the Agentic Service Team, build onboarding-paths 
+> using the team’s services, required repositories, architecture documents, 
+> access-requests, permissions, runbooks, and open onboarding-tasks.”
+
+**Expected SparrowX execution:**
+
+* **`intsvc`** fetches the target engineers metadata, teams composition, active onboarding_paths, pending onboarding_tasks, and service dependencies.
+* **`docsvc`** extracts getting-started documents, service architecture layouts, and operational runbooks.
+* **`agenticsvc`** builds a sequenced onboarding path flagging required access_requests, missing permissions, mandatory reading documents, and the next actionable onboarding_tasks.
+
+### 4. Research / Analysis Over Internal Data
+
+**Example multi-hop query:**
+
+> “Analyze whether the Agentic Orchestrator service has operational risks by correlating recent pull_requests, failed deployments, teams modifications, architecture documents, runbooks completeness, and any documents mentioning recurring model timeouts.”
+
+**Expected SparrowX execution:**
+
+* **`intsvc`** gathers historical services metrics, teams changes, recent pull_requests activity, and deployment logs.
+* **`docsvc`** indexes architecture documents, internal runbooks, post-mortem documents, and files referencing runtime timeouts.
+* **`agenticsvc`** synthesizes the cross-service evidence into an objective risk profile, maps code changes from pull_requests to failed deployments, and references the exact source documents.
 
 
+---
+
+## 📊 Enterprise Simulation & LLMOps (Langfuse Integration)
+
+Out of the box, SparrowX comes preloaded with a **production-grade seed data pipeline** designed to mimic a real, operating enterprise. The environment spins up a native **Agentic Service Team** alongside several other engineering teams acting as isolated organizational tenants.
+
+This multi-tenant simulation generates active synthetic workloads, allowing you to view and analyze live LLMOps metrics via a built-in **Langfuse** dashboard. For organizations running autonomous agents at scale, this integration demonstrates how Langfuse enables you to:
+
+* **Visualize Nested Agent Traces:** Inspect complex, multi-turn agent reasoning paths. You can track exactly how a parent orchestration span branches into specific document lookups, tool calls, or downstream LLM generations.
+* **Monitor Multi-Tenant Cost & Latency:** Break down token consumption, financial costs, and latency profiles dynamically across different engineering teams, service domains, and model types.
+* **Manage Prompts & Iteration Loops:** View how system prompts are centrally versioned, tested in the LLM playground, and hot-deployed to specific agent pipelines without code changes.
+* **Track Operational Quality (Evals):** Monitor live performance using automated "LLM-as-a-judge" scoring metrics, capturing hallucination benchmarks and execution accuracy trends over time.
+This exposes Sparrowx as an agentic internal knowledge system that combines retrieval, structured company context, evidence verification, and workflow orchestration into one engineering assistant.
+
+## 🐦 Ok, But why the name SparrowX?🕵️‍♂️🪙⚓🧭
+Every architecture needs a good origin story. SparrowX is a living, self-referential 
+walkthrough of a production-grade agentic orchestration system that is designed so that the 
+onboarding path itself is mapped and served by the very system you are spinning up.
+
+The name comes from a blend of the modern engineering quest and old-school navigation:
+
+**The Search for X**: Inspired by the ultimate analytical soliloquy— "find X.". In a 
+massive enterprise, X represents the elusive agentic expertise, structural context and
+tribal knowledge buried deep within your engineering silos.
+
+**The Graph as a Map**: SparrowX leverages a dense, graph-based knowledge map to surface 
+that expertise. Much like the pirates of old who lived by the rule that "X marks the
+spot," this platform charts an exact course through your data seas to the treasure you 
+actually need.
+
+**The Legend**: When it comes to successfully navigating chaotic, highly unpredictable 
+and seemingly impossible environments to find exactly what you're looking for... 
+Captain Jack Sparrow was arguably the finest improvisational architect to ever do it.
+
+Consider SparrowX the compass that points to your team's true north.
 
 ## Roadmap
 
-| Feature              | Dormant | In Progress | Completed |
-|----------------------|---------|-------------|-----------|
-| API Gateway          |        |      ✅       |           |
-| Agentic Service          |    ✅    |             |           |
-| Building Blocks      |         |    ✅        |            |
-| Profile Service         |    ✅    |             |           |
-| Search Service | ✅       |             |           |
-| Timeline Service | ✅       |             |           |
-| Tweet Service |        |       ✅      |           |
+| Feature          | Dormant | In Progress | Completed |
+|------------------|---------|-------------|-----------|
+| API Gateway      |        |      ✅       |           |
+| Agentic Service  |    ✅    |             |           |
+| Building Blocks  |         |    ✅        |            |
+| Document Service |        |             |       ✅    |
+| Internal Service |        |             |      ✅     |
 
 
