@@ -1,3 +1,4 @@
-CREATE DATABASE user_write;
-CREATE DATABASE keycloak;
-CREATE DATABASE tweet_write;
+-- CREATE DATABASE user_write;
+-- CREATE DATABASE keycloak;
+-- CREATE DATABASE tweet_write;
+CREATE DATABASE document;

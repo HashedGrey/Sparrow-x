@@ -41,6 +41,10 @@ loki.source.file "services" {
       __path__ = "/var/log/services/tweet-service.log",
       service  = "tweet-service",
     },
+    {
+      __path__ = "/var/log/services/api-gateway-service.log",
+      service  = "api-gateway-service",
+    },
   ]
 
   forward_to = [loki.process.logs.receiver]
