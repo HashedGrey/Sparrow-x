@@ -3,6 +3,7 @@ package buildingblocks.core.events;
 import buildingblocks.core.commands.AsyncCommandBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.ResolvableType;
 import org.springframework.stereotype.Component;
@@ -26,13 +27,14 @@ public class EventBusImpl implements EventBus {
     public EventBusImpl(
             ApplicationContext applicationContext,
             List<EventInterceptor> interceptors,
-            EventMapper eventMapper,
+            ObjectProvider<EventMapper> eventMapperProvider,
             AsyncCommandBus asyncCommandBus
     ) {
         this.applicationContext = applicationContext;
         this.interceptors = interceptors == null ? List.of() : interceptors;
-        this.eventMapper = eventMapper;
-        this.asyncCommandBus = asyncCommandBus;}
+        this.eventMapper = eventMapperProvider.getIfAvailable(NoOpEventMapper::new);
+        this.asyncCommandBus = asyncCommandBus;
+    }
 
     @Override
     public void publish(DomainEvent event) {

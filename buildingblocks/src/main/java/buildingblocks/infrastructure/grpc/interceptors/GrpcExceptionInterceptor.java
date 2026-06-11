@@ -97,6 +97,15 @@ public class GrpcExceptionInterceptor implements ServerInterceptor {
             );
         }
 
+        if (ex instanceof IllegalArgumentException illegalArgument) {
+            return new StatusWithBody(
+                    Status.INVALID_ARGUMENT
+                            .withDescription(illegalArgument.getMessage())
+                            .withCause(illegalArgument),
+                    List.of(illegalArgument.getMessage())
+            );
+        }
+
         if (ex instanceof AppException appEx) {
             return new StatusWithBody(
                     Status.FAILED_PRECONDITION

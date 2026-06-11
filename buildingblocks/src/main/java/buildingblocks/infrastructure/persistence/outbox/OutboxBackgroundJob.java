@@ -6,6 +6,8 @@ import buildingblocks.infrastructure.persistence.outbox.model.OutboxMessage;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,6 +15,15 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
+@ConditionalOnBean({
+        OutboxRepository.class,
+        KafkaIntegrationPublisher.class
+})
+@ConditionalOnProperty(
+        prefix = "sparrowx.outbox",
+        name = "enabled",
+        havingValue = "true"
+)
 public class OutboxBackgroundJob {
 
     private static final Logger logger =
@@ -36,7 +47,6 @@ public class OutboxBackgroundJob {
 
     @Scheduled(fixedDelayString = "${outbox.poll-interval-ms:1000}")
     public void process() {
-
         List<OutboxMessage> messages =
                 repository.findByStatusOrderByCreatedAtAsc(
                         MessageStatus.PENDING,
@@ -56,9 +66,7 @@ public class OutboxBackgroundJob {
 
     @Transactional
     protected void processSingle(OutboxMessage message) {
-
         try {
-
             message.markProcessing();
 
             publisher.publish(message);
@@ -66,9 +74,7 @@ public class OutboxBackgroundJob {
             message.markProcessed();
 
             repository.save(message);
-
         } catch (Exception ex) {
-
             logger.error(
                     "Failed to publish outbox message {}",
                     message.getId(),

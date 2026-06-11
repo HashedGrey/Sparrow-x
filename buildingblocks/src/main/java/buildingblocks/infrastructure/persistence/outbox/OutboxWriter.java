@@ -2,9 +2,10 @@ package buildingblocks.infrastructure.persistence.outbox;
 
 import buildingblocks.core.events.DomainEvent;
 import buildingblocks.infrastructure.persistence.outbox.model.OutboxMessage;
-import buildingblocks.infrastructure.persistence.outbox.model.MessageStatus;
 import buildingblocks.shared.context.CorrelationContext;
 import buildingblocks.shared.utils.JsonUtils;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -12,7 +13,14 @@ import java.util.Map;
 import java.util.UUID;
 
 @Component
-public class OutboxWriter {
+@ConditionalOnBean(OutboxRepository.class)
+@ConditionalOnProperty(
+        prefix = "sparrowx.outbox",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
+public class OutboxWriter implements DomainEventOutbox {
 
     private final OutboxRepository repository;
 
@@ -20,16 +28,14 @@ public class OutboxWriter {
         this.repository = repository;
     }
 
+    @Override
     public void write(DomainEvent event) {
-
         if (event == null) {
             throw new IllegalArgumentException("DomainEvent must not be null");
         }
 
         String payload = serialize(event);
-
         String topic = resolveTopic(event);
-
         String headers = buildHeaders();
 
         OutboxMessage message = new OutboxMessage(
@@ -61,7 +67,6 @@ public class OutboxWriter {
     }
 
     private String resolveAggregateType(DomainEvent event) {
-
         if (event.getAggregateId() == null) {
             return "unknown";
         }
@@ -70,7 +75,6 @@ public class OutboxWriter {
     }
 
     private String resolveMessageKey(DomainEvent event) {
-
         if (event.getAggregateId() != null) {
             return event.getAggregateId().toString();
         }
@@ -79,7 +83,6 @@ public class OutboxWriter {
     }
 
     private String buildHeaders() {
-
         Map<String, String> headers = new HashMap<>();
 
         if (CorrelationContext.getCorrelationId() != null) {

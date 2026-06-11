@@ -1,26 +1,40 @@
 package buildingblocks.contracts;
 
 import buildingblocks.core.events.IntegrationEvent;
+
 import java.time.Instant;
 import java.util.UUID;
 
 public record TweetCreated(
+        UUID eventId,
+        Instant occurredAt,
         UUID tweetId,
         UUID userId,
         String content
 ) implements IntegrationEvent {
 
-    private static final UUID EVENT_ID = UUID.randomUUID();
-    private static final Instant OCCURRED = Instant.now();
+    public TweetCreated(
+            UUID tweetId,
+            UUID userId,
+            String content
+    ) {
+        this(
+                UUID.randomUUID(),
+                Instant.now(),
+                tweetId,
+                userId,
+                content
+        );
+    }
 
     @Override
     public UUID getEventId() {
-        return EVENT_ID;
+        return eventId;
     }
 
     @Override
     public Instant getOccurredAt() {
-        return OCCURRED;
+        return occurredAt;
     }
 
     @Override

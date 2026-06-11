@@ -1,8 +1,10 @@
 package buildingblocks.infrastructure.cache;
 
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 @Component
+@Primary
 public class HybridCacheProvider implements CacheProvider {
 
     private final CaffeineCacheProvider l1;

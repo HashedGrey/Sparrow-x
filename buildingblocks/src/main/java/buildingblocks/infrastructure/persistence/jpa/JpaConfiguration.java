@@ -1,7 +1,7 @@
 package buildingblocks.infrastructure.persistence.jpa;
 
-import buildingblocks.infrastructure.persistence.jpa.JpaAuditorAwareImpl;
 import jakarta.persistence.EntityManagerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateProperties;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateSettings;
@@ -23,6 +23,11 @@ import java.util.Properties;
 @EnableJpaAuditing
 @EnableJpaRepositories(basePackages = "buildingblocks.infrastructure")
 @EntityScan(basePackages = "buildingblocks")
+@ConditionalOnProperty(
+        name = "sparrowx.jpa.enabled",
+        havingValue = "true",
+        matchIfMissing = false
+)
 public class JpaConfiguration {
 
     @Bean
