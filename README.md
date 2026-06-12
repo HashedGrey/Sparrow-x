@@ -108,28 +108,6 @@ This multi-tenant simulation generates active synthetic workloads, allowing you 
 * **Track Operational Quality (Evals):** Monitor live performance using automated "LLM-as-a-judge" scoring metrics, capturing hallucination benchmarks and execution accuracy trends over time.
 This exposes Sparrowx as an agentic internal knowledge system that combines retrieval, structured company context, evidence verification, and workflow orchestration into one engineering assistant.
 
-## 🐦 Ok, But why the name SparrowX?🕵️‍♂️🪙⚓🧭
-Every architecture needs a good origin story. SparrowX is a living, self-referential 
-walkthrough of a production-grade agentic orchestration system that is designed so that the 
-onboarding path itself is mapped and served by the very system you are spinning up.
-
-The name comes from a blend of the modern engineering quest and old-school navigation:
-
-**The Search for X**: Inspired by the ultimate analytical soliloquy— "find X.". In a 
-massive enterprise, X represents the elusive agentic expertise, structural context and
-tribal knowledge buried deep within your engineering silos.
-
-**The Graph as a Map**: SparrowX leverages a dense, graph-based knowledge map to surface 
-that expertise. Much like the pirates of old who lived by the rule that "X marks the
-spot," this platform charts an exact course through your data seas to the treasure you 
-actually need.
-
-**The Legend**: When it comes to successfully navigating chaotic, highly unpredictable 
-and seemingly impossible environments to find exactly what you're looking for... 
-Captain Jack Sparrow was arguably the finest improvisational architect to ever do it.
-
-Consider SparrowX the compass that points to your team's true north.
-
 ## Roadmap
 
 | Feature          | Dormant | In Progress | Completed |
