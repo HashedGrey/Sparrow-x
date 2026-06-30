@@ -17,8 +17,8 @@ The goal is to make SparrowX behave like an internal engineering brain: A system
 answer questions, find context, guide new engineers and reason across structured and 
 unstructured company data.
 
->Crucially, this brain is completely self-referential. The moment it is deployed, 
-SparrowX indexes its own codebase, system architecture and onboarding paths.  
+>Crucially, this brain is completely self-referential. Upon deployment, 
+SparrowX indexes Agentic-Service's own codebase and system architecture into onboarding paths.  
 Incoming developers use the platform itself to learn exactly how to build, scale, 
 and navigate an agentic orchestration system.
 
