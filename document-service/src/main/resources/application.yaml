@@ -26,6 +26,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
+        default_schema: public
         column_ordering_strategy: legacy
         physical_naming_strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
         format_sql: false
