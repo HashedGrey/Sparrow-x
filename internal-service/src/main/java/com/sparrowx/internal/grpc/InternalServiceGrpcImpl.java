@@ -3,15 +3,7 @@ package com.sparrowx.internal.grpc;
 import buildingblocks.core.commands.CommandBus;
 import buildingblocks.core.queries.QueryBus;
 import com.sparrowx.internal.exceptions.InternalServiceException;
-import com.sparrowx.internal.mappers.EngineerMapper;
-import com.sparrowx.internal.mappers.InternalDocumentMapper;
-import com.sparrowx.internal.mappers.InternalGraphMapper;
-import com.sparrowx.internal.mappers.ModuleMapper;
-import com.sparrowx.internal.mappers.OnboardingMapper;
-import com.sparrowx.internal.mappers.PermissionMapper;
-import com.sparrowx.internal.mappers.RepositoryMapper;
-import com.sparrowx.internal.mappers.RunbookMapper;
-import com.sparrowx.internal.mappers.TeamMapper;
+import com.sparrowx.internal.mappers.*;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.slf4j.Logger;
@@ -547,6 +539,40 @@ public class InternalServiceGrpcImpl extends InternalServiceGrpc.InternalService
         } catch (Exception ex) {
             log.error("GetPermission failed", ex);
             throw new InternalServiceException("Failed to get permission", ex);
+        }
+    }
+
+    @Override
+    public void searchInternalEntities(
+            SearchInternalEntitiesRequest request,
+            StreamObserver<SearchInternalEntitiesResponse> responseObserver
+    ) {
+        try {
+            log.debug(
+                    "SearchInternalEntities request tenantId={} query={} allowedTypes={} rootEntityId={} depth={} limit={}",
+                    request.getContext().getTenantId(),
+                    request.getQuery(),
+                    request.getAllowedNodeTypesList(),
+                    request.getRootEntityId(),
+                    request.getDepth(),
+                    request.getLimit()
+            );
+
+            var query = InternalEntitySearchMapper.toSearchInternalEntitiesQuery(request);
+            var result = queryBus.dispatch(query);
+
+            responseObserver.onNext(
+                    InternalEntitySearchMapper.toSearchInternalEntitiesResponse(result)
+            );
+            responseObserver.onCompleted();
+
+        } catch (InternalServiceException ex) {
+            log.error("SearchInternalEntities failed with InternalServiceException", ex);
+            throw ex;
+
+        } catch (Exception ex) {
+            log.error("SearchInternalEntities failed", ex);
+            throw new InternalServiceException("Failed to search internal entities", ex);
         }
     }
 

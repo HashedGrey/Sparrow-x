@@ -1,90 +1,75 @@
 package com.sparrowx.internal.grpc;
 
+import buildingblocks.infrastructure.grpc.interceptors.GrpcExceptionInterceptor;
 import buildingblocks.infrastructure.grpc.interceptors.GrpcLoggingInterceptor;
 import buildingblocks.infrastructure.grpc.interceptors.GrpcMetricsInterceptor;
-import buildingblocks.infrastructure.grpc.interceptors.GrpcResilienceInterceptor;
 import buildingblocks.infrastructure.grpc.interceptors.GrpcTracingInterceptor;
-
-import com.sparrowx.internal.grpc.policies.InternalResiliencePolicy;
-import net.devh.boot.grpc.server.serverfactory.GrpcServerConfigurer;
-
+import com.sparrowx.agentic.grpc.interceptors.GrpcAuthInterceptor;
+import com.sparrowx.agentic.grpc.interceptors.GrpcTenantContextInterceptor;
+import io.grpc.ServerInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.grpc.server.GlobalServerInterceptor;
 
-@Configuration
-public class GrpcServerConfig {
-
-    // private final GrpcAuthInterceptor grpcAuthInterceptor;
-
-    //private final RedisCacheProvider redisCacheProvider;
-    private final GrpcLoggingInterceptor grpcLoggingInterceptor;
-    private final GrpcMetricsInterceptor grpcMetricsInterceptor;
-    private final GrpcTracingInterceptor grpcTracingInterceptor;
-    //private final GrpcDebugInterceptor grpcDebugInterceptor;
-
-    public GrpcServerConfig(
-            //GrpcAuthInterceptor grpcAuthInterceptor,
-            //RedisCacheProvider redisCacheProvider,
-            GrpcLoggingInterceptor grpcLoggingInterceptor,
-            GrpcMetricsInterceptor grpcMetricsInterceptor,
-            GrpcTracingInterceptor grpcTracingInterceptor
-            //GrpcDebugInterceptor grpcDebugInterceptor
-    ) {
-        // this.grpcAuthInterceptor = grpcAuthInterceptor;
-        //this.redisCacheProvider = redisCacheProvider;
-        this.grpcLoggingInterceptor = grpcLoggingInterceptor;
-        this.grpcMetricsInterceptor = grpcMetricsInterceptor;
-        this.grpcTracingInterceptor = grpcTracingInterceptor;
-        //this.grpcDebugInterceptor = grpcDebugInterceptor;
-    }
-
-//    @Bean
-//    public GrpcCachingInterceptor grpcCachingInterceptor() {
-//        InternalCachePolicy policy = new InternalCachePolicy(
-//                redisCacheProvider,
-//                "internal:"
-//        );
-//
-//        return new GrpcCachingInterceptor(policy);
-//    }
+/**
+ * Registers shared BuildingBlocks interceptors and Agentic-specific
+ * security policies in deterministic order.
+ */
+@Configuration(proxyBeanMethods = false)
+public final class GrpcServerConfig {
 
     @Bean
-    public GrpcResilienceInterceptor.ResiliencePolicyResolver internalResiliencePolicyResolver(
-            InternalResiliencePolicy policy
+    @Order(100)
+    @GlobalServerInterceptor
+    public ServerInterceptor grpcTracingInterceptor(
+            GrpcTracingInterceptor interceptor
     ) {
-        return fullMethodName -> policy;
+        return interceptor;
     }
 
-//    @Bean
-//    public GrpcResilienceInterceptor grpcResilienceInterceptor(
-//            GrpcResilienceInterceptor.ResiliencePolicyResolver resolver
-//    ) {
-//        return new GrpcResilienceInterceptor(resolver);
-//    }
+    @Bean
+    @Order(200)
+    @GlobalServerInterceptor
+    public ServerInterceptor grpcExceptionInterceptor(
+            GrpcExceptionInterceptor interceptor
+    ) {
+        return interceptor;
+    }
 
     @Bean
-    public GrpcServerConfigurer grpcServerConfigurer(
-            //GrpcCachingInterceptor grpcCachingInterceptor,
-            GrpcResilienceInterceptor grpcResilienceInterceptor
+    @Order(300)
+    @GlobalServerInterceptor
+    public ServerInterceptor grpcLoggingInterceptor(
+            GrpcLoggingInterceptor interceptor
     ) {
-        return serverBuilder -> {
+        return interceptor;
+    }
 
-            // 1. SECURITY
-            // serverBuilder.intercept(grpcAuthInterceptor);
+    @Bean
+    @Order(400)
+    @GlobalServerInterceptor
+    public ServerInterceptor grpcMetricsInterceptor(
+            GrpcMetricsInterceptor interceptor
+    ) {
+        return interceptor;
+    }
 
-            // 2. OBSERVABILITY
-            serverBuilder.intercept(grpcTracingInterceptor);
-            serverBuilder.intercept(grpcMetricsInterceptor);
-            serverBuilder.intercept(grpcLoggingInterceptor);
+    @Bean
+    @Order(500)
+    @GlobalServerInterceptor
+    public ServerInterceptor agenticAuthInterceptor(
+            GrpcAuthInterceptor interceptor
+    ) {
+        return interceptor;
+    }
 
-//            // 3. FEATURE TOGGLES
-//            serverBuilder.intercept(grpcDebugInterceptor);
-//
-//            // 4. CACHE
-//            serverBuilder.intercept(grpcCachingInterceptor);
-//
-//            // 5. RESILIENCE
-            serverBuilder.intercept(grpcResilienceInterceptor);
-        };
+    @Bean
+    @Order(600)
+    @GlobalServerInterceptor
+    public ServerInterceptor agenticTenantContextInterceptor(
+            GrpcTenantContextInterceptor interceptor
+    ) {
+        return interceptor;
     }
 }

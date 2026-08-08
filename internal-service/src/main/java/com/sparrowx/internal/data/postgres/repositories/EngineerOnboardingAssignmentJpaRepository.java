@@ -1,7 +1,8 @@
 package com.sparrowx.internal.data.postgres.repositories;
 
 import com.sparrowx.internal.data.postgres.entities.EngineerOnboardingAssignmentEntity;
-import org.springframework.data.jpa.repository.JpaRepository;import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
