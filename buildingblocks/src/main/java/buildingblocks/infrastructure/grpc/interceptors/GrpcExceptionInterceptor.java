@@ -2,9 +2,13 @@ package buildingblocks.infrastructure.grpc.interceptors;
 
 import buildingblocks.shared.exceptions.*;
 import io.grpc.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+
+import static org.springframework.http.HttpStatus.FORBIDDEN;
+import static org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
 
 @Component
 public class GrpcExceptionInterceptor implements ServerInterceptor {
@@ -124,6 +128,15 @@ public class GrpcExceptionInterceptor implements ServerInterceptor {
             );
         }
 
+        if (ex instanceof CustomException custom) {
+            return new StatusWithBody(
+                    mapHttpStatusToGrpcStatus(custom.getStatus())
+                            .withDescription(custom.getMessage())
+                            .withCause(custom),
+                    custom.getErrorMessages()
+            );
+        }
+
         // fallback
         return new StatusWithBody(
                 Status.UNKNOWN
@@ -131,5 +144,29 @@ public class GrpcExceptionInterceptor implements ServerInterceptor {
                         .withCause(ex),
                 List.of(ex.getMessage())
         );
+    }
+
+    private Status mapHttpStatusToGrpcStatus(HttpStatus status) {
+        if (status == null) {
+            return Status.INTERNAL;
+        }
+
+        return switch (status) {
+            case BAD_REQUEST, UNPROCESSABLE_ENTITY -> Status.INVALID_ARGUMENT;
+            case NOT_FOUND -> Status.NOT_FOUND;
+            case CONFLICT -> Status.ALREADY_EXISTS;
+            case UNAUTHORIZED -> Status.UNAUTHENTICATED;
+            case FORBIDDEN -> Status.PERMISSION_DENIED;
+            case TOO_MANY_REQUESTS -> Status.RESOURCE_EXHAUSTED;
+            case SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT -> Status.UNAVAILABLE;
+            case NOT_IMPLEMENTED -> Status.UNIMPLEMENTED;
+            default -> {
+                if (status.is4xxClientError()) {
+                    yield Status.FAILED_PRECONDITION;
+                }
+
+                yield Status.INTERNAL;
+            }
+        };
     }
 }

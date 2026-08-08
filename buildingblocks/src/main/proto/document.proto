@@ -1,0 +1,346 @@
+syntax = "proto3";
+
+package document;
+
+option java_multiple_files = true;
+option java_package = "com.sparrowx.document.proto";
+option java_outer_classname = "DocumentServiceProto";
+
+import "google/protobuf/timestamp.proto";
+
+// =========================
+// Public Document API
+// =========================
+service DocumentService {
+  // Lifecycle Management
+  rpc UploadDocument(UploadDocumentRequest) returns (UploadDocumentResponse);
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse);
+  rpc GetIngestionJob(GetIngestionJobRequest) returns (GetIngestionJobResponse);
+
+  // Low-Level Retrieval (Replaces old HybridDocumentSearch)
+  rpc SearchDocumentSpans(SearchDocumentSpansRequest) returns (SearchDocumentSpansResponse);
+
+  // Agentic / DICE Document Evidence Engine (Unary by Default)
+  rpc BuildDocumentEvidence(BuildDocumentEvidenceRequest) returns (BuildDocumentEvidenceResponse);
+  rpc VerifyEvidenceGraph(VerifyEvidenceGraphRequest) returns (VerifyEvidenceGraphResponse);
+}
+
+// =========================
+// Shared Infrastructure Context
+// =========================
+message RequestContext {
+  string request_id = 1;
+  string tenant_id = 2;
+  string user_id = 3;
+  string project_id = 4;
+  string team_id = 5;
+  string trace_id = 6;
+  string caller_service = 7;
+}
+
+// =========================
+// Technical & Logical Enums
+// =========================
+enum DocumentStatusProto {
+  DOCUMENT_STATUS_UNSPECIFIED = 0;
+  DOCUMENT_STATUS_UPLOADED = 1;
+  DOCUMENT_STATUS_INGESTING = 2;
+  DOCUMENT_STATUS_READY = 3;
+  DOCUMENT_STATUS_FAILED = 4;
+}
+
+enum IngestionStatusProto {
+  INGESTION_STATUS_UNSPECIFIED = 0;
+  INGESTION_STATUS_QUEUED = 1;
+  INGESTION_STATUS_EXTRACTING = 2;
+  INGESTION_STATUS_CHUNKING = 3;
+  INGESTION_STATUS_EMBEDDING = 4;
+  INGESTION_STATUS_INDEXING = 5;
+  INGESTION_STATUS_COMPLETED = 6;
+  INGESTION_STATUS_FAILED = 7;
+}
+
+enum RetrievalModeProto {
+  RETRIEVAL_MODE_UNSPECIFIED = 0;
+  RETRIEVAL_MODE_VECTOR = 1;
+  RETRIEVAL_MODE_KEYWORD = 2;
+  RETRIEVAL_MODE_HYBRID = 3;
+}
+
+enum SourceKindProto {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_DOCUMENT_METADATA = 1;
+  SOURCE_KIND_CHUNK = 2;
+  SOURCE_KIND_CLAIM = 3;
+}
+
+enum VerificationStatusProto {
+  VERIFICATION_STATUS_UNSPECIFIED = 0;
+  VERIFICATION_STATUS_UNVERIFIED = 1;
+  VERIFICATION_STATUS_SUPPORTED = 2;
+  VERIFICATION_STATUS_PARTIALLY_SUPPORTED = 3;
+  VERIFICATION_STATUS_UNSUPPORTED = 4;
+  VERIFICATION_STATUS_CONTRADICTED = 5;
+  VERIFICATION_STATUS_NEEDS_SOURCE_CONTEXT = 6;
+}
+
+enum EvidenceGoalProto {
+  EVIDENCE_GOAL_UNSPECIFIED = 0;
+  EVIDENCE_GOAL_EXTRACTION = 1;
+  EVIDENCE_GOAL_COMPARISON = 2;
+  EVIDENCE_GOAL_CONTRADICTION_DETECTION = 3;
+  EVIDENCE_GOAL_COMPLIANCE_AUDIT = 4;
+  EVIDENCE_GOAL_CUSTOM = 5; // Used alongside custom_goal string
+}
+
+enum EvidenceNodeTypeProto {
+  EVIDENCE_NODE_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_NODE_TYPE_CLAIM = 1;
+  EVIDENCE_NODE_TYPE_ENTITY = 2;
+  EVIDENCE_NODE_TYPE_FRAMEWORK = 3;
+  EVIDENCE_NODE_TYPE_METRIC = 4;
+  EVIDENCE_NODE_TYPE_OBLIGATION = 5;
+  EVIDENCE_NODE_TYPE_CUSTOM = 6; // Used alongside custom_node_type string
+}
+
+enum EvidenceRelationTypeProto {
+  EVIDENCE_RELATION_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_RELATION_TYPE_SUPPORTS = 1;
+  EVIDENCE_RELATION_TYPE_CONTRADICTS = 2;
+  EVIDENCE_RELATION_TYPE_MODIFIES = 3;
+  EVIDENCE_RELATION_TYPE_DEPENDS_ON = 4;
+  EVIDENCE_RELATION_TYPE_SIMILAR_TO = 5;
+  EVIDENCE_RELATION_TYPE_CUSTOM = 6; // Used alongside custom_relation_type string
+}
+
+// =========================
+// Core Data Models
+// =========================
+message DocumentProto {
+  string document_id = 1;
+  string tenant_id = 2;
+  string project_id = 3;
+  string team_id = 4;
+  string title = 5;
+  string file_name = 6;
+  string mime_type = 7;
+  int64 size_bytes = 8;
+  string object_key = 9;
+  string content_hash = 10;
+  DocumentStatusProto status = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  string created_by_user_id = 14;
+  repeated string tags = 15;
+  map<string, string> metadata = 16;
+}
+
+message IngestionJobProto {
+  string ingestion_job_id = 1;
+  string document_id = 2;
+  IngestionStatusProto status = 3;
+  string failure_reason = 4;
+  int32 chunks_created = 5;
+  int32 chunks_indexed = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp completed_at = 8;
+}
+
+message SourceSpanProto {
+  string source_span_id = 1;
+  SourceKindProto source_kind = 2;
+  string document_id = 3;
+  string chunk_id = 4;
+  string claim_id = 5;
+  string title = 6;
+  string file_name = 7;
+  int32 page_start = 8;
+  int32 page_end = 9;
+  string citation = 10;
+  string excerpt = 11;
+  double relevance_score = 12;
+  map<string, string> metadata = 13;
+}
+
+message DocumentScopeProto {
+  repeated string document_ids = 1;
+  repeated string file_names = 2;
+  repeated string collection_ids = 3;
+  repeated string tags = 4;
+  map<string, string> metadata_filters = 5;
+}
+
+// =========================
+// Request / Response Signatures
+// =========================
+message UploadDocumentRequest {
+  RequestContext context = 1;
+  string file_name = 2;
+  string mime_type = 3;
+  bytes content = 4;
+  string title = 5;
+  repeated string tags = 6;
+  map<string, string> metadata = 7;
+}
+
+message UploadDocumentResponse {
+  string document_id = 1;
+  string ingestion_job_id = 2;
+  DocumentStatusProto status = 3;
+}
+
+message GetDocumentRequest {
+  RequestContext context = 1;
+  string document_id = 2;
+}
+
+message GetDocumentResponse {
+  DocumentProto document = 1;
+}
+
+message GetIngestionJobRequest {
+  RequestContext context = 1;
+  string ingestion_job_id = 2;
+}
+
+message GetIngestionJobResponse {
+  IngestionJobProto job = 1;
+}
+
+message SearchDocumentSpansRequest {
+  RequestContext context = 1;
+  string query = 2;
+  RetrievalModeProto retrieval_mode = 3;
+  DocumentScopeProto scope = 4;
+  int32 limit = 5;
+  bool include_excerpts = 6;
+}
+
+message SearchDocumentSpansResponse {
+  repeated SourceSpanProto spans = 1;
+  double coverage_score = 2;
+  repeated string warnings = 3;
+}
+
+// =========================
+// Agentic / DICE Specification
+// =========================
+message EvidenceBuildSpecProto {
+  EvidenceGoalProto goal = 1;
+  string custom_goal = 2; // Populated only if goal == EVIDENCE_GOAL_CUSTOM
+
+  repeated EvidenceNodeTypeProto requested_node_types = 3;
+  repeated EvidenceRelationTypeProto requested_relation_types = 4;
+
+  string output_schema_ref = 5;
+  string output_schema_version = 6;
+  map<string, string> options = 7;
+}
+
+message EvidenceBuildContextProto {
+  string retrieval_hint = 1;
+  repeated string topics = 2;
+  repeated string entity_names = 3;
+  repeated string keywords = 4;
+  map<string, string> metadata_filters = 5;
+  string debug_task_instruction = 6; // Strictly for logging/tracing, not parsing
+}
+
+message BuildDocumentEvidenceRequest {
+  RequestContext context = 1;
+  DocumentScopeProto scope = 2;
+  EvidenceBuildSpecProto spec = 3;
+  EvidenceBuildContextProto build_context = 4;
+  RetrievalModeProto retrieval_mode = 5;
+  int32 limit = 6;
+  bool include_excerpts = 7;
+  bool allow_claim_cache = 8;
+  bool require_verification = 9;
+}
+
+message BuildDocumentEvidenceResponse {
+  DocumentEvidenceGraphProto graph = 1;
+  bool used_chunk_retrieval = 2;
+  bool used_claim_cache = 3;
+  double coverage_score = 4;
+  repeated string warnings = 5;
+}
+
+// =========================
+// Normalized Evidence Graph
+// =========================
+message DocumentEvidenceGraphProto {
+  string graph_id = 1;
+  EvidenceGoalProto goal = 2;
+
+  repeated DocumentEvidenceNodeProto nodes = 3;
+  repeated DocumentEvidenceEdgeProto edges = 4;
+  repeated SourceSpanProto source_pool = 5;
+
+  VerificationStatusProto verification_status = 6;
+  double confidence = 7;
+  double coverage_score = 8;
+  repeated string warnings = 9;
+  repeated string missing_node_types = 10;
+  string output_schema_ref = 11;
+  string output_schema_version = 12;
+  google.protobuf.Timestamp created_at = 13;
+}
+
+message DocumentEvidenceNodeProto {
+  string node_id = 1;
+
+  EvidenceNodeTypeProto node_type = 2;
+  string custom_node_type = 3;
+
+  string title = 4;
+  string summary = 5;
+  string normalized_text = 6;
+  repeated string source_span_ids = 7;
+
+  VerificationStatusProto verification_status = 8;
+  double confidence = 9;
+  double coverage_score = 10;
+  bool requires_source_context = 11;
+  repeated string tags = 12;
+  repeated string warnings = 13;
+  map<string, string> attributes = 14;
+}
+
+message DocumentEvidenceEdgeProto {
+  string edge_id = 1;
+  string from_node_id = 2;
+  string to_node_id = 3;
+
+  EvidenceRelationTypeProto relation_type = 4;
+  string custom_relation_type = 5;
+
+  string rationale = 6;
+  repeated string source_span_ids = 7;
+
+  double confidence = 8;
+  repeated string warnings = 9;
+  map<string, string> attributes = 10;
+}
+
+// =========================
+// Graph Verification Signatures
+// =========================
+message VerifyEvidenceGraphRequest {
+  RequestContext context = 1;
+  DocumentEvidenceGraphProto graph = 2;
+  bool require_all_nodes_supported = 3;
+  bool require_all_edges_supported = 4;
+}
+
+message VerifyEvidenceGraphResponse {
+  bool supported = 1;
+  VerificationStatusProto verification_status = 2;
+  double confidence = 3;
+  double coverage_score = 4;
+  DocumentEvidenceGraphProto verified_graph = 5;
+  repeated string unsupported_node_ids = 6;
+  repeated string unsupported_edge_ids = 7;
+  repeated string warnings = 8;
+  string explanation = 9;
+}
