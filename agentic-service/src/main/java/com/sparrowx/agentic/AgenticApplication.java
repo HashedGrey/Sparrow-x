@@ -1,7 +1,15 @@
-﻿package com.sparrowx.agentic;
+package com.sparrowx.agentic;
 
-/**
- * Spring Boot entrypoint; enables Embabel agents/states, APIs, workers, schedulers.
- */
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+
+@SpringBootApplication(
+        scanBasePackages = {"com.sparrowx.agentic", "buildingblocks"})
+@ConfigurationPropertiesScan
 public class AgenticApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AgenticApplication.class, args);
+    }
 }

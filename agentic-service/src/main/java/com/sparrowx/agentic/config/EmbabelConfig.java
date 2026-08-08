@@ -1,0 +1,109 @@
+package com.sparrowx.agentic.config;
+
+import com.sparrowx.agentic.actions.document.BuildDocumentEvidenceAction;
+import com.sparrowx.agentic.actions.document.GetIngestionJobAction;
+import com.sparrowx.agentic.actions.document.SearchDocumentSpansAction;
+import com.sparrowx.agentic.actions.document.UploadDocumentAction;
+import com.sparrowx.agentic.actions.document.VerifyEvidenceGraphAction;
+import com.sparrowx.agentic.actions.governance.ApplyRedactionAction;
+import com.sparrowx.agentic.actions.governance.CheckGroundingAction;
+import com.sparrowx.agentic.actions.internal.ReadInternalCompanyGraphAction;
+import com.sparrowx.agentic.actions.internal.ReadLearningGraphAction;
+import com.sparrowx.agentic.actions.internal.SearchInternalEntitiesAction;
+import com.sparrowx.agentic.actions.synthesis.BuildCitationsAction;
+import com.sparrowx.agentic.actions.synthesis.ComposeAnswerAction;
+import com.sparrowx.agentic.adapters.document.DocumentClientMapper;
+import com.sparrowx.agentic.adapters.document.DocumentClientResiliencePolicy;
+import com.sparrowx.agentic.adapters.document.DocumentGrpcClient;
+import com.sparrowx.agentic.adapters.internal.InternalClientMapper;
+import com.sparrowx.agentic.adapters.internal.InternalClientResiliencePolicy;
+import com.sparrowx.agentic.adapters.internal.InternalGrpcClient;
+import com.sparrowx.agentic.adapters.llm.LlmFallbackPolicy;
+import com.sparrowx.agentic.agents.EmbabelMissionRunner;
+import com.sparrowx.agentic.agents.MissionAgent;
+import com.sparrowx.agentic.components.IntentComponent;
+import com.sparrowx.agentic.components.PlanningComponent;
+import com.sparrowx.agentic.components.ReviewComponent;
+import com.sparrowx.agentic.components.SynthesisComponent;
+import com.sparrowx.agentic.components.ToolSelectionComponent;
+import com.sparrowx.agentic.planning.PlanValidator;
+import com.sparrowx.agentic.planning.ToolSelectionPolicy;
+import com.sparrowx.agentic.tools.document.DocumentEvidenceMapper;
+import com.sparrowx.agentic.tools.document.DocumentEvidenceRequestBuilder;
+import com.sparrowx.agentic.tools.document.DocumentIngestionTool;
+import com.sparrowx.agentic.tools.document.DocumentSpanSearchRequestBuilder;
+import com.sparrowx.agentic.tools.document.DocumentTool;
+import com.sparrowx.agentic.tools.document.UploadDocumentRequestBuilder;
+import com.sparrowx.agentic.tools.internal.InternalContextMapper;
+import com.sparrowx.agentic.tools.internal.InternalContextTool;
+import com.sparrowx.agentic.tools.internal.InternalEntitySearchRequestBuilder;
+import com.sparrowx.agentic.tools.internal.InternalGraphRequestBuilder;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+/**
+ * Registers the one-turn Embabel reasoning surface and concrete actions.
+ *
+ * Embabel decides one next authorized action. Temporal durably repeats the
+ * plan/review/execute loop and remains responsible for scheduling and retries.
+ */
+@Configuration(proxyBeanMethods = false)
+@Import({
+        DocumentClientMapper.class,
+        DocumentGrpcClient.class,
+
+        InternalClientMapper.class,
+        InternalClientResiliencePolicy.class,
+        InternalGrpcClient.class,
+
+        DocumentTool.class,
+        DocumentIngestionTool.class,
+        DocumentEvidenceRequestBuilder.class,
+        DocumentSpanSearchRequestBuilder.class,
+        DocumentEvidenceMapper.class,
+        UploadDocumentRequestBuilder.class,
+
+        InternalContextTool.class,
+        InternalEntitySearchRequestBuilder.class,
+        InternalGraphRequestBuilder.class,
+        InternalContextMapper.class,
+
+        BuildDocumentEvidenceAction.class,
+        GetIngestionJobAction.class,
+        SearchDocumentSpansAction.class,
+        UploadDocumentAction.class,
+        VerifyEvidenceGraphAction.class,
+
+        SearchInternalEntitiesAction.class,
+        ReadInternalCompanyGraphAction.class,
+        ReadLearningGraphAction.class,
+
+        ApplyRedactionAction.class,
+        CheckGroundingAction.class,
+        BuildCitationsAction.class,
+
+        PlanValidator.class,
+        ToolSelectionPolicy.class,
+
+        IntentComponent.class,
+        PlanningComponent.class,
+        ReviewComponent.class,
+        SynthesisComponent.class,
+        ToolSelectionComponent.class,
+
+        MissionAgent.class,
+        EmbabelMissionRunner.class
+})
+public final class EmbabelConfig {
+
+    /**
+     * ComposeAnswerAction requires an explicitly configured model fallback
+     * policy. It is not registered when no model route exists.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnBean(LlmFallbackPolicy.class)
+    @Import(ComposeAnswerAction.class)
+    static class LlmSynthesisActionConfiguration {
+    }
+}
