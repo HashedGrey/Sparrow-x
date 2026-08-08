@@ -3,6 +3,7 @@ package com.sparrowx.agentic.agents;
 import com.sparrowx.agentic.components.IntentComponent.IntentRequest;
 import com.sparrowx.agentic.components.SynthesisComponent.SynthesisDraft;
 import com.sparrowx.agentic.components.SynthesisComponent.SynthesisRequest;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.planning.MissionIntent;
 
 import java.util.Objects;
