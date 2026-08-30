@@ -7,9 +7,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.grpc.*;
-import org.springframework.stereotype.Component;
 
-@Component
+
 public class GrpcResilienceInterceptor implements ServerInterceptor {
 
     private final ResiliencePolicyResolver policyResolver;

@@ -5,7 +5,7 @@ import buildingblocks.shared.context.AuthContext;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-@Component
+
 public class GrpcAuthInterceptor implements ServerInterceptor {
 
     public static final Context.Key<AuthContext> REQUEST_CTX_KEY =
@@ -24,6 +24,7 @@ public class GrpcAuthInterceptor implements ServerInterceptor {
     private static final Metadata.Key<String> ROLES_HEADER =
             Metadata.Key.of("x-roles", Metadata.ASCII_STRING_MARSHALLER);
 
+
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -31,6 +32,10 @@ public class GrpcAuthInterceptor implements ServerInterceptor {
             ServerCallHandler<ReqT, RespT> next) {
 
         // Validate internal call header (service-to-service)
+        System.out.println(">>> AUTH HIT");
+        System.out.println("internal=" + headers.get(INTERNAL_HEADER));
+        System.out.println("user=" + headers.get(USER_ID_HEADER));
+        System.out.println("tenant=" + headers.get(TENANT_ID_HEADER));
         if (headers.get(INTERNAL_HEADER) == null) {
             call.close(Status.UNAUTHENTICATED.withDescription("Missing internal call header"), new Metadata());
             return new ServerCall.Listener<>() {};
@@ -50,6 +55,12 @@ public class GrpcAuthInterceptor implements ServerInterceptor {
                 authContext.addRole(role.trim());
             }
         }
+
+        // BB GrpcAuthInterceptor
+        System.out.println(">>> AUTH HIT");
+        System.out.println("internal=" + headers.get(INTERNAL_HEADER));
+        System.out.println("user=" + headers.get(USER_ID_HEADER));
+        System.out.println("tenant=" + headers.get(TENANT_ID_HEADER));
 
         Context grpcContext = Context.current().withValue(REQUEST_CTX_KEY, authContext);
 

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 
-@Component
+
 public class GrpcCachingInterceptor implements ServerInterceptor {
 
     private static final long DEFAULT_TTL_SECONDS = 30;

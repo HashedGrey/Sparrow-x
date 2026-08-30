@@ -9,7 +9,7 @@ import buildingblocks.infrastructure.observability.MetricRegistryUtil;
 import java.time.Duration;
 import java.time.Instant;
 
-@Component
+
 public class GrpcMetricsInterceptor implements ServerInterceptor {
 
     @Override

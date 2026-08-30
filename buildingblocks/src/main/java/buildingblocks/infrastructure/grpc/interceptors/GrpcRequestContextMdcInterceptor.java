@@ -6,7 +6,7 @@ import io.grpc.*;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
-@Component
+
 public class GrpcRequestContextMdcInterceptor implements ServerInterceptor {
 
     private static final String REQUEST_ID = "request_id";

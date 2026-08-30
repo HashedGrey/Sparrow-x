@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.1</version>
+        <version>3.5.14</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.buildingblocks</groupId>
@@ -39,7 +39,7 @@
             <dependency>
                 <groupId>org.springframework.grpc</groupId>
                 <artifactId>spring-grpc-dependencies</artifactId>
-                <version>1.0.3</version>
+                <version>0.12.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -52,13 +52,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
         <!-- Spring Data Neo4j (Repositories + OGM) -->
@@ -76,7 +74,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
         <dependency>
@@ -87,7 +84,6 @@
         <dependency>
             <groupId>org.springframework.data</groupId>
             <artifactId>spring-data-r2dbc</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
 
@@ -140,17 +136,17 @@
         </dependency>
 
         <!-- Flyway -->
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>11.1.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.flywaydb</groupId>-->
+<!--            <artifactId>flyway-core</artifactId>-->
+<!--            <version>11.1.0</version>-->
+<!--        </dependency>-->
 
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-            <version>10.20.1</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.flywaydb</groupId>-->
+<!--            <artifactId>flyway-database-postgresql</artifactId>-->
+<!--            <version>10.20.1</version>-->
+<!--        </dependency>-->
 
 <!--        &lt;!&ndash; Resilience 4j &ndash;&gt;-->
 <!--        <dependency>-->
@@ -213,13 +209,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
-            <version>3.4.1</version>
         </dependency>
 
         <!-- Javax -->
@@ -320,11 +314,6 @@
             <artifactId>spring-grpc-spring-boot-starter</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf.version}</version>
-        </dependency>
 
 
 

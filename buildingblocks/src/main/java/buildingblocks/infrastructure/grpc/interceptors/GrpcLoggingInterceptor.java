@@ -4,7 +4,7 @@ import buildingblocks.infrastructure.observability.LoggerFactoryUtil;
 import io.grpc.*;
 import org.springframework.stereotype.Component;
 
-@Component
+
 public class GrpcLoggingInterceptor implements ServerInterceptor {
 
     @Override

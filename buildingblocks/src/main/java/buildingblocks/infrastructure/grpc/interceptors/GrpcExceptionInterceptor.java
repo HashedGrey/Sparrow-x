@@ -10,7 +10,7 @@ import java.util.List;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
 
-@Component
+
 public class GrpcExceptionInterceptor implements ServerInterceptor {
 
     @Override

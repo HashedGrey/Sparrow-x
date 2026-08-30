@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /**
  * A gRPC interceptor that logs debug info conditionally based on a feature toggle.
  */
-@Component
+
 public class GrpcDebugInterceptor implements ServerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(GrpcDebugInterceptor.class);

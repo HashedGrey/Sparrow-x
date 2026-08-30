@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
-@Component
+
 public class GrpcTracingInterceptor implements ServerInterceptor {
 
     private static final Logger logger =
