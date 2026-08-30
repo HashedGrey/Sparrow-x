@@ -1,561 +1,557 @@
-agentic-rag-service
+agsvc-tree.txt is a commented source-tree walkthrough of SparrowX Agentic Service (AGSvc), intended
+as structured context for an LLM to explain how the service works end to end. It maps packages, files,
+and responsibilities across mission submission, validation, intent interpretation, planning, Embabel
+agent execution, evidence collection, synthesis, citations, persistence, Temporal orchestration,
+gRPC transport, configuration, and external service adapters. Comments describe why each component
+exists and how it participates in the runtime flow.
+agentic-service
 ├── pom.xml
-│   // Spring Boot + Embabel starters + gRPC + OTEL + security + ES/Qdrant/Neo4j/MinIO clients.
-│   // Add durable-runtime deps only for persistence, queues, locking, migrations, and serialization.
-│   // Keep Embabel as planner; do not reimplement planning internals.
-│
-├── README.md
-│   // Mission examples, execution model, evidence-only guarantees, replay model,
-│   // human-gate lifecycle, recovery semantics, deployment notes.
-│
-├── scripts
-│   ├── docker
-│   │   └── Dockerfile
-│   │       // Multi-stage build, non-root runtime, healthchecks, minimal base image.
-│   ├── k8s
-│   │   ├── deployment.yaml
-│   │   │   // Probes, resources, OTEL env, config/secret mounts, execution worker labels.
-│   │   ├── service.yaml
-│   │   │   // gRPC/HTTP ports and selectors.
-│   │   ├── worker-deployment.yaml
-│   │   │   // Dedicated mission worker pool for long-running execution and resume processing.
-│   │   ├── hpa.yaml
-│   │   │   // Scale policy based on CPU + queue depth + step latency + backlog age.
-│   │   ├── networkpolicy.yaml
-│   │   │   // Restrict egress/ingress to approved dependencies only.
-│   │   ├── podmonitor.yaml
-│   │   │   // Prometheus scrape config.
-│   │   ├── pdb.yaml
-│   │   │   // Pod disruption budget to reduce mission interruption blast radius.
-│   │   └── configmap-runtime.yaml
-│   │       // Runtime knobs: checkpoint cadence, lease TTL, replay limits, approval SLAs.
-│   └── local
-│       ├── docker-compose.yml
-│       │   // Local ES, QDrant, MinIO, Postgres, OTEL collector, optional Keycloak, optional Redis.
-│       ├── seed-data.sh
-│       │   // Loads sample PDFs / mock tweets / approval fixtures for local eval runs.
-│       └── shell.sh
-│           // Launch helper for Spring Shell + local Ragbot shell / mission admin commands.
-│
-└── src
-    ├── main
-    │   ├── java/com/sparrowx/agenticrag
-    │   │   ├── AgenticRagApplication.java
-    │   │   │   // Spring Boot entrypoint; enables Embabel components, APIs, workers, schedulers.
-    │   │   │
-    │   │   ├── config
-    │   │   │   ├── EmbabelPlatformConfig.java
-    │   │   │   │   // Embabel platform wiring: agent components, model providers, tool groups.
-    │   │   │   ├── RuntimeConfig.java
-    │   │   │   │   // Composition root for execution runtime, stores, queues, locks, schedulers.
-    │   │   │   ├── ExecutionConfig.java
-    │   │   │   │   // Step engine, checkpoint store, lease/heartbeat policy, retry caps, replay policy.
-    │   │   │   ├── LlmConfig.java
-    │   │   │   │   // Model endpoints, structured output settings, retries, fallbacks, budgets.
-    │   │   │   ├── RetrievalConfig.java
-    │   │   │   │   // ES + Qdrant + local exact index + alias dictionaries + retrieval knobs.
-    │   │   │   ├── IngestionConfig.java
-    │   │   │   │   // Scheduler pools, rate limits, parser safety flags, backfill controls.
-    │   │   │   ├── GrpcHttpConfig.java
-    │   │   │   │   // gRPC/HTTP server setup, limits, keepalive, streaming/backpressure.
-    │   │   │   ├── SecurityConfig.java
-    │   │   │   │   // Keycloak/JWT, RBAC evaluators, tenant propagation, reviewer authz.
-    │   │   │   ├── ObservabilityConfig.java
-    │   │   │   │   // OTEL traces/metrics/logs, correlation IDs, mission/span linking.
-    │   │   │   ├── SerializationConfig.java
-    │   │   │   │   // Canonical JSON/CBOR/Avro strategy for checkpoint snapshots and effect payloads.
-    │   │   │   ├── SchemaMigrationConfig.java
-    │   │   │   │   // Liquibase/Flyway bootstrap for mission/step/checkpoint/effect tables.
-    │   │   │   ├── RagbotProperties.java
-    │   │   │   │   // Chatbot-specific properties: persona, objective, templates, UI knobs.
-    │   │   │   ├── RagConfiguration.java
-    │   │   │   │   // Example bean: LuceneSearchOperations with embedding service and index path.
-    │   │   │   └── ChatConfiguration.java
-    │   │   │       // Chatbot utilities; mission progress projections for shells/UIs.
-    │   │   │
-    │   │   ├── api
-    │   │   │   ├── grpc
-    │   │   │   │   ├── AgenticRagGrpcImpl.java
-    │   │   │   │   │   // Public mission API: submit mission, stream progress, retrieve final output.
-    │   │   │   │   ├── MissionControlGrpcImpl.java
-    │   │   │   │   │   // Resume, cancel, approve, reject, fork, replay, inspect checkpoint APIs.
-    │   │   │   │   ├── interceptors
-    │   │   │   │   │   ├── GrpcAuthInterceptor.java
-    │   │   │   │   │   ├── GrpcTracingInterceptor.java
-    │   │   │   │   │   ├── GrpcMetricsInterceptor.java
-    │   │   │   │   │   ├── GrpcBudgetInterceptor.java
-    │   │   │   │   │   └── GrpcIdempotencyInterceptor.java
-    │   │   │   │   │       // Enforces request IDs / mission dedupe / safe retries at the boundary.
-    │   │   │   │   └── policies
-    │   │   │   │       └── AgentResiliencePolicy.java
-    │   │   │   │           // Timeouts/CBs/retries/hedging for downstream reads only.
-    │   │   │   └── http
-    │   │   │       ├── AdminController.java
-    │   │   │       │   // Index health, backfills, runtime diagnostics, queue depth, stuck mission scans.
-    │   │   │       ├── EvalController.java
-    │   │   │       │   // Internal mission execution endpoints (RBAC-gated).
-    │   │   │       ├── ReviewController.java
-    │   │   │       │   // Human approval/rejection UI endpoints for paused missions.
-    │   │   │       └── ReplayController.java
-    │   │   │           // Replay/fork inspection endpoints for audit/debug workflows.
-    │   │   │
-    │   │   ├── mission
-    │   │   │   ├── model
-    │   │   │   │   ├── MissionRequest.java
-    │   │   │   │   │   // User mission + attachments + explicit constraints/budgets/idempotency key.
-    │   │   │   │   ├── MissionProgressEvent.java
-    │   │   │   │   │   // Progress stream events for clients/UIs.
-    │   │   │   │   ├── MissionResult.java
-    │   │   │   │   │   // Ranked claim clusters, tweet clusters, author rankings, citations.
-    │   │   │   │   ├── MissionContext.java
-    │   │   │   │   │   // Trace, tenant, budget, versions, policy decisions, artifact handles.
-    │   │   │   │   ├── MissionStatus.java
-    │   │   │   │   │   // SUBMITTED/RUNNING/WAITING_APPROVAL/FAILED_RETRYABLE/FAILED_TERMINAL/COMPLETED.
-    │   │   │   │   ├── MissionPath.java
-    │   │   │   │   │   // FAST / RESEARCH / REPLAY / FORKED path selection.
-    │   │   │   │   └── MissionVersionSnapshot.java
-    │   │   │   │       // Frozen versions: planner, prompts, model alias set, projection, scoring formulas.
-    │   │   │   ├── MissionSubmissionService.java
-    │   │   │   │   // Validates request, creates execution root, persists initial mission record.
-    │   │   │   ├── MissionFlowCoordinator.java
-    │   │   │   │   // Thin adapter between mission domain and durable execution runtime.
-    │   │   │   ├── MissionPathSelector.java
-    │   │   │   │   // Chooses fast vs research path using SLA/budget constraints.
-    │   │   │   ├── MissionLifecycleManager.java
-    │   │   │   │   // Authoritative mission state transitions and terminalization logic.
-    │   │   │   ├── MissionStage.java
-    │   │   │   │   // Canonical business stages (ingest → project → extract → ... → synthesize).
-    │   │   │   └── MissionStateMachine.java
-    │   │   │       // Enforces allowed transitions and rejection reasons.
-    │   │   │
-    │   │   ├── execution
-    │   │   │   ├── model
-    │   │   │   │   ├── MissionExecution.java
-    │   │   │   │   │   // Root durable record for a mission run; system of record for runtime state.
-    │   │   │   │   ├── StepExecution.java
-    │   │   │   │   │   // One persisted durable step attempt with input/output refs and status.
-    │   │   │   │   ├── StepKind.java
-    │   │   │   │   │   // PROJECT_EVIDENCE / EXTRACT_CLAIMS / ... / SYNTHESIZE_REPORT etc.
-    │   │   │   │   ├── StepStatus.java
-    │   │   │   │   │   // QUEUED/LEASED/RUNNING/PAUSED/SUCCEEDED/FAILED_RETRYABLE/FAILED_TERMINAL.
-    │   │   │   │   ├── CheckpointRef.java
-    │   │   │   │   │   // Pointer to frozen state snapshot for resume/replay/fork.
-    │   │   │   │   ├── ResumeToken.java
-    │   │   │   │   │   // Safe opaque cursor for client-driven resume operations.
-    │   │   │   │   ├── WorkerLease.java
-    │   │   │   │   │   // Lease ownership for stuck worker recovery and heartbeat semantics.
-    │   │   │   │   ├── ExecutionError.java
-    │   │   │   │   │   // Durable normalized failure envelope with class, cause, retryability, blame.
-    │   │   │   │   ├── ExecutionLineage.java
-    │   │   │   │   │   // Replay/fork ancestry graph for audit and debugging.
-    │   │   │   │   └── RuntimeDecision.java
-    │   │   │   │       // Persisted runtime-level decisions: retry, skip, rollback, pause, terminalize.
-    │   │   │   ├── store
-    │   │   │   │   ├── MissionExecutionStore.java
-    │   │   │   │   ├── StepExecutionStore.java
-    │   │   │   │   ├── LeaseStore.java
-    │   │   │   │   ├── ExecutionLineageStore.java
-    │   │   │   │   └── RuntimeDecisionStore.java
-    │   │   │   │       // Durable persistence APIs; Postgres-backed in production.
-    │   │   │   ├── engine
-    │   │   │   │   ├── MissionExecutionEngine.java
-    │   │   │   │   │   // Core durable runtime: dequeue, lease, load checkpoint, run step, persist outcome.
-    │   │   │   │   ├── StepDispatcher.java
-    │   │   │   │   │   // Maps StepKind to concrete step handler; no business logic here.
-    │   │   │   │   ├── StepExecutor.java
-    │   │   │   │   │   // Standard execution contract with checkpointing before/after each durable step.
-    │   │   │   │   ├── StepPlannerBridge.java
-    │   │   │   │   │   // Invokes Embabel planner and converts planned actions into durable step intents.
-    │   │   │   │   ├── ExecutionHeartbeat.java
-    │   │   │   │   │   // Emits liveness beats for leased missions to detect worker death.
-    │   │   │   │   ├── StuckMissionRecoveryService.java
-    │   │   │   │   │   // Reclaims expired leases and safely requeues retryable work.
-    │   │   │   │   └── Terminalizer.java
-    │   │   │   │       // Final success/failure/abort handling and result publication.
-    │   │   │   ├── queue
-    │   │   │   │   ├── MissionQueue.java
-    │   │   │   │   ├── StepQueue.java
-    │   │   │   │   ├── DelayedRetryQueue.java
-    │   │   │   │   └── DeadLetterQueue.java
-    │   │   │   │       // Queue abstraction; can be DB-backed or broker-backed.
-    │   │   │   ├── checkpoint
-    │   │   │   │   ├── CheckpointSnapshot.java
-    │   │   │   │   │   // Frozen typed runtime state at a durable boundary.
-    │   │   │   │   ├── CheckpointStore.java
-    │   │   │   │   │   // Save/load/list checkpoints by mission and lineage.
-    │   │   │   │   ├── CheckpointSerializer.java
-    │   │   │   │   │   // Canonical serialization with schema versioning.
-    │   │   │   │   ├── CheckpointPolicy.java
-    │   │   │   │   │   // Before-step/after-step/approval-boundary checkpoint strategy.
-    │   │   │   │   ├── InputSnapshotter.java
-    │   │   │   │   │   // Freezes step inputs to preserve replayability.
-    │   │   │   │   └── OutputSnapshotter.java
-    │   │   │   │       // Persists step outputs separately from domain projections.
-    │   │   │   ├── resume
-    │   │   │   │   ├── ResumeService.java
-    │   │   │   │   │   // Resume from last successful checkpoint using persisted cursor.
-    │   │   │   │   ├── ReplayService.java
-    │   │   │   │   │   // Deterministic re-run from an earlier checkpoint for audit/debug.
-    │   │   │   │   ├── ForkService.java
-    │   │   │   │   │   // Branch execution from prior checkpoint with modified inputs or policies.
-    │   │   │   │   ├── ResumeValidator.java
-    │   │   │   │   │   // Ensures resume target is legal and lineage-safe.
-    │   │   │   │   └── StateDiffService.java
-    │   │   │   │       // Compare checkpoint outputs across attempts/forks.
-    │   │   │   ├── interrupt
-    │   │   │   │   ├── HumanGate.java
-    │   │   │   │   │   // Durable pause request with payload and expected reviewer role.
-    │   │   │   │   ├── HumanGateStore.java
-    │   │   │   │   │   // Persisted approval/rejection/timeout state.
-    │   │   │   │   ├── ApprovalService.java
-    │   │   │   │   │   // Resume logic after human approve/reject/edit.
-    │   │   │   │   ├── ApprovalPayloadBuilder.java
-    │   │   │   │   │   // Produces inspectable review bundles from frozen checkpoint state.
-    │   │   │   │   └── ApprovalTimeoutHandler.java
-    │   │   │   │       // Escalate or fail missions waiting too long for review.
-    │   │   │   ├── effects
-    │   │   │   │   ├── PendingEffect.java
-    │   │   │   │   │   // Durable record of an external side effect or publication attempt.
-    │   │   │   │   ├── EffectKind.java
-    │   │   │   │   │   // STORE_RESULT / EMIT_EVENT / WRITE_AUDIT / SEND_NOTIFICATION / CACHE_FILL.
-    │   │   │   │   ├── EffectStatus.java
-    │   │   │   │   │   // PREPARED/COMMITTED/FAILED/COMPENSATED/SKIPPED.
-    │   │   │   │   ├── EffectLedger.java
-    │   │   │   │   │   // Exact history of prepared/committed effects with idempotency keys.
-    │   │   │   │   ├── EffectStore.java
-    │   │   │   │   │   // Durable persistence for effect records.
-    │   │   │   │   ├── EffectCommitter.java
-    │   │   │   │   │   // Commits prepared effects after step success is durable.
-    │   │   │   │   ├── EffectCompensator.java
-    │   │   │   │   │   // Best-effort compensation rules for reversible effects.
-    │   │   │   │   └── EffectIdempotency.java
-    │   │   │   │       // Generates and verifies dedupe keys for all write-like operations.
-    │   │   │   ├── policy
-    │   │   │   │   ├── RetryClassifier.java
-    │   │   │   │   │   // Retry only safe failure classes; never blind-retry ambiguous writes.
-    │   │   │   │   ├── ExecutionBudgetEnforcer.java
-    │   │   │   │   │   // Hard budget checks before launching expensive steps.
-    │   │   │   │   ├── ConcurrencyPolicy.java
-    │   │   │   │   │   // Controls parallelism at mission, tenant, and dependency level.
-    │   │   │   │   ├── ReplayPolicy.java
-    │   │   │   │   │   // Guards what may be replayed live vs frozen.
-    │   │   │   │   └── PausePolicy.java
-    │   │   │   │       // Decides when human review is mandatory.
-    │   │   │   └── step
-    │   │   │       ├── ProjectEvidenceStep.java
-    │   │   │       ├── ExtractClaimsStep.java
-    │   │   │       ├── DedupeClaimsStep.java
-    │   │   │       ├── ValidateClaimsStep.java
-    │   │   │       ├── BuildTargetedQueriesStep.java
-    │   │   │       ├── FetchTweetDiscussionsStep.java
-    │   │   │       ├── HydrateTweetThreadsStep.java
-    │   │   │       ├── ClusterTweetsByClaimStep.java
-    │   │   │       ├── LabelStanceStep.java
-    │   │   │       ├── ComputeContradictionDensityStep.java
-    │   │   │       ├── RankAuthorsStep.java
-    │   │   │       ├── RankClaimClustersStep.java
-    │   │   │       ├── VerifyProvenanceStep.java
-    │   │   │       ├── RedactForOutputStep.java
-    │   │   │       ├── BuildCitationsStep.java
-    │   │   │       └── SynthesizeReportStep.java
-    │   │   │           // Durable step handlers. Small, atomic, replayable boundaries.
-    │   │   │
-    │   │   ├── dice
-    │   │   │   ├── ContextAssembler.java
-    │   │   │   │   // Builds typed mission context from evidence snapshots + domain signals.
-    │   │   │   ├── DomainBinder.java
-    │   │   │   │   // Converts LLM outputs into typed commands/objects; rejects/repairs invalid structs.
-    │   │   │   ├── GuardrailBinder.java
-    │   │   │   │   // Enforces invariants: cite SourceRef, no invented metadata, no raw unprojected fields.
-    │   │   │   └── projection
-    │   │   │       ├── ProjectionContext.java
-    │   │   │       │   // Alias dictionaries, locale/timezone rules, normalization knobs, version.
-    │   │   │       ├── EvidenceProjection.java
-    │   │   │       │   // Canonicalizes evidence doc + chunk metadata before any LLM-visible rendering.
-    │   │   │       ├── MetadataNormalizer.java
-    │   │   │       │   // Normalizes titles/authors/dates/model aliases/benchmark aliases.
-    │   │   │       └── ContextProjection.java
-    │   │   │           // Stable LLM prompt projections derived from projected metadata and models.
-    │   │   │
-    │   │   ├── agents
-    │   │   │   ├── ToolishRag.java
-    │   │   │   │   // Wrapper exposing fine-grained search tools to the LLM.
-    │   │   │   ├── ClaimMiningAgent.java
-    │   │   │   │   // Embabel planner component for PDF claim extraction/dedupe pathing.
-    │   │   │   ├── SocialEvidenceAgent.java
-    │   │   │   │   // Embabel planner component for targeted query/retrieval strategy.
-    │   │   │   ├── StanceAndRankingAgent.java
-    │   │   │   │   // Embabel planner component for stance/ranking strategy.
-    │   │   │   └── ReportSynthesisAgent.java
-    │   │   │       // Embabel planner component for final synthesis strategy.
-    │   │   │
-    │   │   ├── actions
-    │   │   │   ├── dice
-    │   │   │   │   └── ProjectEvidenceAction.java
-    │   │   │   │       // Embabel action; planner-level semantic action only.
-    │   │   │   ├── evidence
-    │   │   │   │   ├── ExtractClaimsAction.java
-    │   │   │   │   ├── DedupeClaimsAction.java
-    │   │   │   │   ├── ValidateClaimsAction.java
-    │   │   │   │   └── BuildCitationsAction.java
-    │   │   │   ├── social
-    │   │   │   │   ├── BuildTargetedQueriesAction.java
-    │   │   │   │   ├── FetchTweetDiscussionsAction.java
-    │   │   │   │   ├── ClusterTweetsByClaimAction.java
-    │   │   │   │   └── RankAuthorsAction.java
-    │   │   │   ├── analysis
-    │   │   │   │   ├── LabelStanceAction.java
-    │   │   │   │   ├── ComputeContradictionDensityAction.java
-    │   │   │   │   └── RankClaimClustersAction.java
-    │   │   │   └── governance
-    │   │   │       ├── VerifyProvenanceAction.java
-    │   │   │       └── RedactForOutputAction.java
-    │   │   │           // Planner actions remain, but durable execution now wraps them explicitly.
-    │   │   │
-    │   │   ├── evidence
-    │   │   │   ├── model
-    │   │   │   │   ├── SourceRef.java
-    │   │   │   │   │   // Canonical PDF pointer: doc/page/section/chunk offsets + hashes.
-    │   │   │   │   ├── EvidenceChunk.java
-    │   │   │   │   │   // Parsed text chunk + projected metadata + SourceRef + embedding key.
-    │   │   │   │   ├── Claim.java
-    │   │   │   │   ├── ClaimCluster.java
-    │   │   │   │   └── ClaimClusterScore.java
-    │   │   │   ├── ingest
-    │   │   │   │   ├── pipeline
-    │   │   │   │   │   ├── IngestionScheduler.java
-    │   │   │   │   │   ├── FetchJobWorker.java
-    │   │   │   │   │   └── IndexEvidencePipeline.java
-    │   │   │   │   │       // Parse → chunk → project(DICE) → classify → embed → index.
-    │   │   │   │   ├── connectors
-    │   │   │   │   │   ├── PdfFetcher.java
-    │   │   │   │   │   ├── PdfParser.java
-    │   │   │   │   │   └── TikaHierarchicalContentReader.java
-    │   │   │   │   └── transform
-    │   │   │   │       ├── DoclingPreprocessor.java
-    │   │   │   │       ├── SectionClassifier.java
-    │   │   │   │       ├── ClaimCanonicalizer.java
-    │   │   │   │       ├── ProvenanceBuilder.java
-    │   │   │   │       └── PrivacyRedactionService.java
-    │   │   │   ├── extract
-    │   │   │   │   ├── ClaimExtractor.java
-    │   │   │   │   ├── ClaimDedupe.java
-    │   │   │   │   ├── ClaimValidator.java
-    │   │   │   │   └── ClaimClusterExplainer.java
-    │   │   │   └── store
-    │   │   │       ├── EvidenceIndex.java
-    │   │   │       ├── EvidenceStore.java
-    │   │   │       ├── ClaimStore.java
-    │   │   │       └── ClaimIndexAdapter.java
-    │   │   │
-    │   │   ├── social
-    │   │   │   ├── model
-    │   │   │   │   ├── TweetDoc.java
-    │   │   │   │   ├── TweetCluster.java
-    │   │   │   │   ├── StanceLabel.java
-    │   │   │   │   └── AuthorScore.java
-    │   │   │   ├── query
-    │   │   │   │   ├── TargetedQueryBuilder.java
-    │   │   │   │   └── QueryTemplates.java
-    │   │   │   ├── fetch
-    │   │   │   │   ├── TweetRetrievalPort.java
-    │   │   │   │   ├── TweetThreadHydrator.java
-    │   │   │   │   └── AuthorSignalsPort.java
-    │   │   │   └── cluster
-    │   │   │       ├── TweetClusterer.java
-    │   │   │       └── ThreadDeduper.java
-    │   │   │
-    │   │   ├── analysis
-    │   │   │   ├── StanceClassifier.java
-    │   │   │   ├── ContradictionDensity.java
-    │   │   │   ├── ImpactScorer.java
-    │   │   │   ├── AuthorRanker.java
-    │   │   │   └── ResultSynthesizer.java
-    │   │   │       // Must consume frozen step outputs only, never live retrieval during synthesis.
-    │   │   │
-    │   │   ├── governance
-    │   │   │   ├── CitationAssembler.java
-    │   │   │   ├── ProvenanceVerifier.java
-    │   │   │   ├── AuditTrailService.java
-    │   │   │   ├── Redaction.java
-    │   │   │   ├── GovernanceDecision.java
-    │   │   │   │   // Persisted policy/governance outcomes for replayable audits.
-    │   │   │   └── GovernanceSnapshotter.java
-    │   │   │       // Freezes caveats, redactions, provenance checks into checkpoint-visible state.
-    │   │   │
-    │   │   ├── policy
-    │   │   │   ├── BudgetPolicy.java
-    │   │   │   ├── ToolAuthzPolicy.java
-    │   │   │   ├── DataHandlingPolicy.java
-    │   │   │   ├── SafetyPolicy.java
-    │   │   │   ├── CompliancePolicy.java
-    │   │   │   ├── AgreementPolicy.java
-    │   │   │   └── PolicySnapshot.java
-    │   │   │       // Frozen policy inputs/decisions for deterministic replay and blame analysis.
-    │   │   │
-    │   │   ├── adapters
-    │   │   │   ├── sparrowxgrpc
-    │   │   │   │   ├── TweetGrpcClient.java
-    │   │   │   │   ├── SearchGrpcClient.java
-    │   │   │   │   ├── ProfileGrpcClient.java
-    │   │   │   │   └── TrendsGrpcClient.java
-    │   │   │   ├── evidence
-    │   │   │   │   ├── ElasticEvidenceAdapter.java
-    │   │   │   │   ├── VectorEvidenceAdapter.java
-    │   │   │   │   ├── LocalDocIndexAdapter.java
-    │   │   │   │   ├── LuceneEvidenceAdapter.java
-    │   │   │   │   └── Neo4jEvidenceAdapter.java
-    │   │   │   └── storage
-    │   │   │       └── MinioEvidenceBlobStore.java
-    │   │   │
-    │   │   ├── prompts
-    │   │   │   ├── PromptPack.java
-    │   │   │   │   // Loads/composes prompts by task/version; only projected context is allowed.
-    │   │   │   ├── PromptVersions.java
-    │   │   │   ├── PromptSnapshot.java
-    │   │   │   │   // Frozen prompt/template/materialization references per mission.
-    │   │   │   ├── StructuredOutputSchemas.java
-    │   │   │   └── templates
-    │   │   │       ├── claim_extraction.jinja
-    │   │   │       ├── claim_dedupe.jinja
-    │   │   │       ├── targeted_query_gen.jinja
-    │   │   │       ├── tweet_stance_labeling.jinja
-    │   │   │       ├── author_scoring.jinja
-    │   │   │       └── synthesis.jinja
-    │   │   │
-    │   │   ├── validation
-    │   │   │   ├── SchemaValidator.java
-    │   │   │   ├── OutputRepair.java
-    │   │   │   ├── HallucinationGuard.java
-    │   │   │   └── ReplayDeterminismValidator.java
-    │   │   │       // Verifies replay inputs are frozen and legal before rerun/fork.
-    │   │   │
-    │   │   ├── mcp
-    │   │   │   ├── McpToolGateway.java
-    │   │   │   └── McpToolPolicyAdapter.java
-    │   │   │       // Optional external tools treated as evidence tools only.
-    │   │   │
-    │   │   ├── exception
-    │   │   │   ├── MissionExecutionException.java
-    │   │   │   ├── PolicyViolationException.java
-    │   │   │   ├── EvidenceProcessingException.java
-    │   │   │   ├── ValidationException.java
-    │   │   │   ├── CheckpointCorruptionException.java
-    │   │   │   ├── IllegalResumeException.java
-    │   │   │   ├── EffectCommitException.java
-    │   │   │   └── LeaseLostException.java
-    │   │   │
-    │   │   └── util
-    │   │       ├── Jsons.java
-    │   │       ├── RetryPolicies.java
-    │   │       ├── Concurrency.java
-    │   │       ├── Timeouts.java
-    │   │       └── Hashing.java
-    │   │           // Stable hashes for input/output snapshots and idempotency keys.
-    │   │
-    │   └── resources
-    │       ├── application.yml
-    │       │   # endpoints, security, budgets, tool permissions, OTEL exporters, feature flags,
-    │       │   # checkpoint policy, lease TTL, replay rules, approval SLAs, idempotency windows.
-    │       ├── application-dev.yml
-    │       │   # local creds, mocks, lower limits, verbose tracing, in-memory worker knobs.
-    │       ├── db
-    │       │   └── migration
-    │       │       ├── V1__mission_execution.sql
-    │       │       ├── V2__step_execution.sql
-    │       │       ├── V3__checkpoint_store.sql
-    │       │       ├── V4__effect_ledger.sql
-    │       │       ├── V5__human_gate.sql
-    │       │       └── V6__execution_lineage.sql
-    │       │           // Core runtime tables; these are what upgrade robustness.
-    │       ├── prompts
-    │       │   ├── claim_extraction.jinja
-    │       │   ├── claim_dedupe.jinja
-    │       │   ├── targeted_query_gen.jinja
-    │       │   ├── tweet_stance_labeling.jinja
-    │       │   ├── author_scoring.jinja
-    │       │   └── synthesis.jinja
-    │       ├── grpc
-    │       │   └── agentic_rag.proto.config.json
-    │       │       # Method deadlines/retries/budgets/backpressure hints.
-    │       └── proto
-    │           ├── agentic_rag.proto
-    │           │   // Mission API contract: progress stream + ranked outputs + citations.
-    │           └── mission_control.proto
-    │               // Resume/approve/reject/replay/fork/control-plane API contract.
-    │
-    └── test
-        ├── java/com/sparrowx/agenticrag
-        │   ├── dice
-        │   │   ├── EvidenceProjectionTest.java
-        │   │   ├── MetadataNormalizerTest.java
-        │   │   └── GuardrailBinderTest.java
-        │   ├── agents
-        │   │   ├── ClaimMiningAgentTest.java
-        │   │   ├── SocialEvidenceAgentTest.java
-        │   │   ├── StanceAndRankingAgentTest.java
-        │   │   └── ReportSynthesisAgentTest.java
-        │   ├── actions
-        │   │   ├── ProjectEvidenceActionTest.java
-        │   │   ├── ExtractClaimsActionTest.java
-        │   │   ├── DedupeClaimsActionTest.java
-        │   │   ├── FetchTweetDiscussionsActionTest.java
-        │   │   ├── LabelStanceActionTest.java
-        │   │   └── RankClaimClustersActionTest.java
-        │   ├── execution
-        │   │   ├── MissionExecutionEngineTest.java
-        │   │   ├── StepDispatcherTest.java
-        │   │   ├── CheckpointStoreTest.java
-        │   │   ├── ResumeServiceTest.java
-        │   │   ├── ReplayServiceTest.java
-        │   │   ├── ForkServiceTest.java
-        │   │   ├── StuckMissionRecoveryServiceTest.java
-        │   │   ├── EffectCommitterTest.java
-        │   │   ├── EffectIdempotencyTest.java
-        │   │   └── ApprovalServiceTest.java
-        │   │       // The runtime layer must now be tested as a product, not a helper.
-        │   ├── evidence
-        │   │   ├── SectionClassifierTest.java
-        │   │   ├── ProvenanceBuilderTest.java
-        │   │   └── ClaimValidatorTest.java
+│   // Spring Boot 3.5.14, Java 24, Embabel 1.0.0 and Temporal 1.37.0.
+│   // Declares both the OpenAI starter and direct embabel-agent-api contract.
+├── src/main/resources
+│   ├── application.yml
+│   │   // Embabel model/scanning, shared Temporal queue and service defaults.
+│   └── application-dev.yml
+│       // Local PostgreSQL, Flyway, Keycloak and OTLP settings.
+├── src/test/java/com/sparrowx/agentic
+│   ├── agents/MissionAgentArchitectureTest.java
+│   │   // Verifies four typed @Action methods and one @AchievesGoal action.
+│   └── temporal/MissionActivitiesBoundaryTest.java
+│       // Prevents agentic planning/blackboard types entering Temporal contracts.
+└── src/main/java/com/sparrowx/
+    └── agentic
+        │   // Spring Boot entrypoint.
+        │   // Starts gRPC and the Temporal worker; no local queue/recovery scheduler.
+        ├── AgenticApplication.java
+        │
+        ├── actions
+        │   ├── document
+        │   │   // One document-evidence capability executed by the Embabel evidence action.
+        │   │   ├── BuildDocumentEvidenceAction.java
+        │   │   // Reads ingestion status for a previously uploaded artifact.
+        │   │   ├── GetIngestionJobAction.java
+        │   │   // Executes one direct document-span search.
+        │   │   ├── SearchDocumentSpansAction.java
+        │   │   // Uploads one artifact through Document Service.
+        │   │   ├── UploadDocumentAction.java
+        │   │   // Verifies one evidence graph.
+        │   │   └── VerifyEvidenceGraphAction.java
+        │   │
         │   ├── governance
-        │   │   ├── CitationAssemblerTest.java
-        │   │   ├── ProvenanceVerifierTest.java
-        │   │   ├── HallucinationGuardTest.java
-        │   │   └── GovernanceSnapshotterTest.java
-        │   ├── api
-        │   │   ├── GrpcInterceptorsTest.java
-        │   │   ├── AgentResiliencePolicyTest.java
-        │   │   └── MissionControlGrpcImplTest.java
-        │   ├── replay
-        │   │   ├── DeterministicReplayTest.java
-        │   │   ├── ForkLineageTest.java
-        │   │   └── StateDiffServiceTest.java
-        │   └── integration
-        │       ├── EndToEndClaimToTweetRankingTest.java
-        │       ├── CrashRecoveryMidMissionTest.java
-        │       ├── ResumeAfterApprovalTest.java
-        │       ├── DuplicateDeliveryIdempotencyTest.java
-        │       ├── WorkerLeaseExpirationRecoveryTest.java
-        │       └── ReplayFromCheckpointTest.java
-        │           // These are the tests that prove LangGraph-like runtime strength.
-        └── resources
-            ├── fixtures
-            │   ├── pdfs
-            │   │   ├── gpt5_system_card_sample.pdf
-            │   │   ├── routed_llm_stress_eval_sample.pdf
-            │   │   └── preparedness_framework_v2_sample.pdf
-            │   ├── tweets
-            │   │   ├── threads_sample.json
-            │   │   └── author_signals_sample.json
-            │   ├── claims
-            │   │   └── expected_claim_clusters.json
-            │   ├── checkpoints
-            │   │   ├── mission_paused_after_claims.json
-            │   │   └── mission_retryable_after_tweet_fetch.json
-            │   └── approvals
-            │       ├── approve.json
-            │       └── reject_with_edits.json
-            └── prompts
-                └── sample_mission.txt
-                    // Canonical mission fixture for regression tests.
+        │   │   // Applies tenant and data-handling redaction.
+        │   │   ├── ApplyRedactionAction.java
+        │   │   // Evaluates claim grounding against registered evidence.
+        │   │   └── CheckGroundingAction.java
+        │   │
+        │   ├── internal
+        │   │   // Reads company graph context around resolved entities.
+        │   │   ├── ReadInternalCompanyGraphAction.java
+        │   │   // Reads onboarding and learning graph context.
+        │   │   ├── ReadLearningGraphAction.java
+        │   │   // Resolves one natural-language target set into internal entities.
+        │   │   └── SearchInternalEntitiesAction.java
+        │   │
+        │   └── synthesis
+        │       // Converts EvidenceRef records into public Citation records.
+        │       ├── BuildCitationsAction.java
+        │       // Composes the final answer from frozen evidence and observations.
+        │       └── ComposeAnswerAction.java
+        │
+        ├── adapters
+        │   ├── document
+        │   │   // Converts Agentic document models to and from Document Service protos.
+        │   │   ├── DocumentClientMapper.java
+        │   │   // Owns deadlines and gRPC failure classification, but never retries.
+        │   │   ├── DocumentClientResiliencePolicy.java
+        │   │   // Typed Document Service gRPC transport.
+        │   │   └── DocumentGrpcClient.java
+        │   │
+        │   ├── internal
+        │   │   // Converts Agentic internal models to and from Internal Service protos.
+        │   │   ├── InternalClientMapper.java
+        │   │   // Owns deadlines and gRPC failure classification, but never retries.
+        │   │   ├── InternalClientResiliencePolicy.java
+        │   │   // Typed Internal Service gRPC transport.
+        │   │   └── InternalGrpcClient.java
+        │   │
+        │   └── llm
+        │       // Selects a configured fallback model/provider within one Embabel run.
+        │       // It must not implement another retry loop.
+        │       ├── LlmFallbackPolicy.java
+        │       // Structured model calls used by Intent, Planning and Synthesis components.
+        │       ├── StructuredLlmClient.java
+        │       // Parsed output, raw text, model, token usage and cost metadata.
+        │       └── StructuredLlmResponse.java
+        │
+        ├── agents
+        │   // Programmatic AgentPlatform/AgentInvocation entrypoint.
+        │   // Executes one complete Embabel process and validates mission identity.
+        │   ├── EmbabelMissionRunner.java
+        │   // Collects enterprise evidence for the planned capabilities.
+        │   // Temporal never sees the returned observations or EvidenceRef values.
+        │   ├── DefaultMissionEvidenceService.java
+        │   // Typed blackboard value passed into the terminal synthesis action.
+        │   ├── MissionEvidence.java
+        │   // Enterprise evidence collection boundary used by MissionAgent.
+        │   ├── MissionEvidenceService.java
+        │   // Complete typed Embabel graph:
+        │   // input → intent → plan → evidence → @AchievesGoal MissionResult.
+        │   ├── MissionAgent.java
+        │   // Immutable business input hydrated inside the retryable Activity.
+        │   // Contains no Temporal execution state.
+        │   └── MissionRunInput.java
+        │
+        ├── components
+        │   // Converts the submitted query into typed MissionIntent.
+        │   ├── IntentComponent.java
+        │   // Produces the initial or revised MissionPlan.
+        │   ├── PlanningComponent.java
+        │   // Retained LLM review port required by LlmConfig.
+        │   // It is not a Temporal reactor component.
+        │   ├── ReviewComponent.java
+        │   // Produces final output for MissionAgent's @AchievesGoal action.
+        │   └── SynthesisComponent.java
+        │
+        ├── config
+        │   // Enables Agentic business/read-model JPA persistence.
+        │   // Temporal execution tables are not mapped here.
+        │   ├── AgenticDataJpaConfiguration.java
+        │   // Configures Document and Internal gRPC channels and credentials.
+        │   ├── DownstreamClientsConfig.java
+        │   // Registers the real Embabel agent graph and enterprise capability beans.
+        │   // Embabel starter supplies AgentPlatform and annotation scanning.
+        │   ├── EmbabelConfig.java
+        │   // Configures structured-output LLM providers and fallback selection.
+        │   ├── LlmConfig.java
+        │   // Supplies the frozen mission-version snapshot captured at submission.
+        │   ├── MissionConfig.java
+        │   // Configures authentication, tenant isolation and reviewer authorization.
+        │   ├── SecurityConfig.java
+        │   // Configures canonical JSON and Temporal payload conversion.
+        │   ├── SerializationConfig.java
+        │   // Creates Temporal service stubs and WorkflowClient.
+        │   ├── TemporalConfig.java
+        │   // Endpoint, namespace, queues, worker concurrency and execution defaults.
+        │   ├── TemporalProperties.java
+        │   // Registers the recovery-only Workflow and complete Embabel Activity.
+        │   // Owns worker concurrency and the shared task queue.
+        │   └── TemporalWorkerConfig.java
+        │
+        ├── data
+        │   └── postgres
+        │       ├── adapters
+        │       │   // Stores explicit large-payload and MISSION_RESULT snapshots.
+        │       │   // It is not a Workflow recovery store.
+        │       │   ├── PostgresCheckpointStore.java
+        │       │   // Stores auditable approval/rejection gate records.
+        │       │   ├── PostgresHumanGateStore.java
+        │       │   // Stores the business Mission aggregate and public lifecycle projection.
+        │       │   ├── PostgresMissionStore.java
+        │       │   // Stores public progress events and resume tokens.
+        │       │   └── PostgresRuntimeEventStore.java
+        │       │
+        │       ├── entities
+        │       │   // External large-payload or final-result snapshot row.
+        │       │   ├── CheckpointEntity.java
+        │       │   // Human gate audit row.
+        │       │   ├── HumanGateEntity.java
+        │       │   // Mission business aggregate/read projection row.
+        │       │   ├── MissionEntity.java
+        │       │   // Public replayable progress-event row.
+        │       │   └── RuntimeEventEntity.java
+        │       │
+        │       ├── mappers
+        │       │   // Maps external snapshots.
+        │       │   ├── CheckpointEntityMapper.java
+        │       │   // Maps human gate state.
+        │       │   ├── HumanGateEntityMapper.java
+        │       │   // Maps the Mission aggregate.
+        │       │   ├── MissionEntityMapper.java
+        │       │   // Maps domain MissionProgressEvent records.
+        │       │   └── RuntimeEventEntityMapper.java
+        │       │
+        │       └── repositories
+        │           // Repository for external snapshots.
+        │           ├── CheckpointJpaRepository.java
+        │           // Repository for human gate audit rows.
+        │           ├── HumanGateJpaRepository.java
+        │           // Repository for tenant-scoped Mission aggregates.
+        │           ├── MissionJpaRepository.java
+        │           // Repository for ordered progress-event replay.
+        │           └── RuntimeEventJpaRepository.java
+        │
+        ├── exceptions
+        │   // Stable Agentic service exception root.
+        │   ├── AgenticServiceException.java
+        │   // Invalid or incompatible external snapshot.
+        │   ├── CheckpointCorruptionException.java
+        │   // Gate authorization, expiry or transition failure.
+        │   ├── HumanGateException.java
+        │   // Maps terminal Temporal Workflow/Activity failure into Agentic semantics.
+        │   ├── MissionExecutionException.java
+        │   // Tenant-scoped mission lookup failure.
+        │   ├── MissionNotFoundException.java
+        │   // Mission request or command validation failure.
+        │   ├── MissionValidationException.java
+        │   // Governance or authorization denial.
+        │   ├── PolicyViolationException.java
+        │   // Document, Internal or LLM invocation failure.
+        │   └── ToolCallException.java
+        │
+        ├── features
+        │   ├── approvemissiongate
+        │   │   // Reviewer approval input.
+        │   │   ├── ApproveMissionGateCommand.java
+        │   │   // Sends a synchronous approve Workflow Update.
+        │   │   ├── ApproveMissionGateCommandHandler.java
+        │   │   // Validates reviewer context, mission, gate and note.
+        │   │   ├── ApproveMissionGateCommandValidator.java
+        │   │   // Confirmed resumed/current status and approval timestamp.
+        │   │   └── ApproveMissionGateResult.java
+        │   │
+        │   ├── cancelmission
+        │   │   // Public graceful cancellation input.
+        │   │   ├── CancelMissionCommand.java
+        │   │   // Sends a synchronous cancel Workflow Update.
+        │   │   ├── CancelMissionCommandHandler.java
+        │   │   // Validates mission, tenant, caller and reason.
+        │   │   ├── CancelMissionCommandValidator.java
+        │   │   // Confirmed CANCELLED state and cancellation timestamp.
+        │   │   └── CancelMissionResult.java
+        │   │
+        │   ├── getmissionresult
+        │   │   // Tenant-scoped result request.
+        │   │   ├── GetMissionResultQuery.java
+        │   │   // Reads Mission and the latest MISSION_RESULT checkpoint.
+        │   │   ├── GetMissionResultQueryHandler.java
+        │   │   // Validates context and mission identity.
+        │   │   ├── GetMissionResultQueryValidator.java
+        │   │   // Read model selecting result, error or wait_state.
+        │   │   └── GetMissionResultView.java
+        │   │
+        │   ├── rejectmissiongate
+        │   │   // Reviewer rejection input.
+        │   │   ├── RejectMissionGateCommand.java
+        │   │   // Sends a synchronous reject Workflow Update.
+        │   │   ├── RejectMissionGateCommandHandler.java
+        │   │   // Validates reviewer context, mission, gate and reason.
+        │   │   ├── RejectMissionGateCommandValidator.java
+        │   │   // Confirmed resulting status and rejection timestamp.
+        │   │   └── RejectMissionGateResult.java
+        │   │
+        │   ├── streammissionprogress
+        │   │   // Stable resume-token abstraction.
+        │   │   ├── MissionEventCursor.java
+        │   │   // Public MissionProgressEvent read projection.
+        │   │   ├── MissionProgressEventView.java
+        │   │   // Mission, context and optional resume token.
+        │   │   ├── StreamMissionProgressQuery.java
+        │   │   // Replays from earliest/token, then tails RuntimeEventStore.
+        │   │   // Stops on terminal event or gRPC client cancellation.
+        │   │   ├── StreamMissionProgressQueryHandler.java
+        │   │   // Validates tenant, mission and resume token.
+        │   │   └── StreamMissionProgressQueryValidator.java
+        │   │
+        │   └── submitmission
+        │       // Normalized public submission command.
+        │       ├── SubmitMissionCommand.java
+        │       // Validates and delegates to MissionSubmissionService.
+        │       ├── SubmitMissionCommandHandler.java
+        │       // Validates request shape and bounded input values.
+        │       ├── SubmitMissionCommandValidator.java
+        │       // Existing or newly accepted mission result.
+        │       └── SubmitMissionResult.java
+        │
+        ├── governance
+        │   // Normalizes and enforces LLM/tool/retrieval/token/cost limits.
+        │   ├── BudgetPolicy.java
+        │   // Tenant isolation, retention and sensitive-data handling.
+        │   ├── DataHandlingPolicy.java
+        │   // Evidence and citation requirements.
+        │   ├── GroundingPolicy.java
+        │   // Determines when the Workflow must wait for human review.
+        │   ├── HumanApprovalPolicy.java
+        │   // Frozen policy state for audit and replay-safe references.
+        │   ├── PolicySnapshot.java
+        │   // Source-service authorization.
+        │   ├── SourceAuthorizationPolicy.java
+        │   // Tool and action authorization.
+        │   ├── ToolAuthorizationPolicy.java
+        │   │
+        │   └── model
+        │       // One governance outcome included in MissionResult.
+        │       ├── GovernanceDecision.java
+        │       // ALLOWED, DENIED, REDACTED and human-review decisions.
+        │       └── GovernanceDecisionType.java
+        │
+        ├── grpc
+        │   // Implements all six public proto RPCs through CommandBus/QueryBus.
+        │   ├── AgenticServiceGrpcImpl.java
+        │   // Sole authority for converting failures into gRPC/MissionError.
+        │   ├── GrpcExceptionHandler.java
+        │   // Configures the public gRPC server and registered server interceptors.
+        │   ├── GrpcServerConfig.java
+        │   │
+        │   └── interceptors
+        │       // Validates and propagates tenant context.
+        │       └── GrpcTenantContextInterceptor.java
+        │
+        ├── mappers
+        │   // Shared domain/proto value mapping.
+        │   ├── AgenticMapper.java
+        │   // Maps domain failures into MissionError or gRPC Status.
+        │   ├── ErrorGrpcMapper.java
+        │   // Maps persisted domain progress events into proto events.
+        │   ├── MissionEventGrpcMapper.java
+        │   // Maps proto RequestContext into internal context.
+        │   └── RequestContextGrpcMapper.java
+        │
+        ├── mission
+        │   // Idempotently persists public progress events.
+        │   ├── MissionEventPublisher.java
+        │   // Owns legal business lifecycle transitions.
+        │   ├── MissionLifecycleService.java
+        │   // Builds the complete proto-compatible result domain object.
+        │   ├── MissionResultAssembler.java
+        │   // Selects result, error or wait state.
+        │   ├── MissionResultReadService.java
+        │   // Validates idempotency, compares request fingerprint,
+        │   // stores large input by reference and invokes Temporal start-or-get.
+        │   // Existing missions are also checked for missing Workflow startup.
+        │   ├── MissionSubmissionService.java
+        │   // Idempotently persists terminal state, result/error and terminal event.
+        │   // It is invoked through a Temporal Activity.
+        │   ├── Terminalizer.java
+        │   │
+        │   ├── artifact
+        │   │   // Prepared references, hashes, upload outcomes and warnings.
+        │   │   ├── ArtifactPreparationResult.java
+        │   │   // Proto-aligned artifact types plus documented internal extensions.
+        │   │   ├── ArtifactType.java
+        │   │   // Normalized submitted artifact with one content mode.
+        │   │   ├── InputArtifact.java
+        │   │   // Resolved document, object, text or external reference.
+        │   │   └── PreparedArtifact.java
+        │   │
+        │   ├── evidence
+        │   │   // User-facing evidence citation.
+        │   │   ├── Citation.java
+        │   │   // Normalized source provenance.
+        │   │   ├── EvidenceRef.java
+        │   │   // Stable evidence dedupe and identity authority.
+        │   │   ├── EvidenceRegistry.java
+        │   │   // INPUT_ARTIFACT, DOCUMENT, SPAN, INTERNAL_ENTITY,
+        │   │   // INTERNAL_GRAPH, TOOL_RESULT and AGENTIC_CHECKPOINT.
+        │   │   └── EvidenceSourceType.java
+        │   │
+        │   ├── model
+        │   │   // One currently executing Embabel/Agentic component.
+        │   │   ├── ComponentInvocation.java
+        │   │   // Typed proto-aligned component classification.
+        │   │   ├── ComponentKind.java
+        │   │   // One structured finding in the final result.
+        │   │   ├── Finding.java
+        │   │   // THEME, SIGNAL, RISK, GAP, OPPORTUNITY and related types.
+        │   │   ├── FindingType.java
+        │   │   // Public unresolved gate projection.
+        │   │   ├── HumanGateState.java
+        │   │   // Business aggregate and public lifecycle projection.
+        │   │   ├── Mission.java
+        │   │   // Preserves all proto budget fields independently.
+        │   │   // Includes input/output tokens, cost micros and runtime.
+        │   │   ├── MissionBudget.java
+        │   │   // Source, tool, citation, review and runtime constraints.
+        │   │   ├── MissionConstraints.java
+        │   │   // Tenant/user/project/team/session/trace context.
+        │   │   ├── MissionContext.java
+        │   │   // Stable failure envelope.
+        │   │   ├── MissionFailure.java
+        │   │   // Stable failure classification.
+        │   │   ├── MissionFailureReason.java
+        │   │   // FAST, RESEARCH or GOVERNED route.
+        │   │   ├── MissionPath.java
+        │   │   // Public persisted progress event.
+        │   │   // Uses ComponentInvocation and runtime StepStatus.
+        │   │   ├── MissionProgressEvent.java
+        │   │   // Normalized mission request.
+        │   │   ├── MissionRequest.java
+        │   │   // Complete final result including structured/debug output,
+        │   │   // sections, findings, recommendations, evidence and governance.
+        │   │   ├── MissionResult.java
+        │   │   // Public mission lifecycle state.
+        │   │   ├── MissionStatus.java
+        │   │   // Frozen model, prompt, policy and tool versions.
+        │   │   ├── MissionVersionSnapshot.java
+        │   │   // One actionable recommendation linked to findings/evidence.
+        │   │   ├── Recommendation.java
+        │   │   // One ordered final-answer section.
+        │   │   └── ResultSection.java
+        │   │
+        │   └── store
+        │       // Sole business Mission persistence authority.
+        │       └── MissionStore.java
+        │
+        ├── observability
+        │   // Logs business lifecycle transitions.
+        │   ├── MissionLifecycleLogger.java
+        │   // Business counters/timers plus Temporal metric correlation.
+        │   ├── MissionMetrics.java
+        │   // Logs logical hop and Activity attempt outcomes.
+        │   ├── MissionStepLogger.java
+        │   // Central mission, tenant, workflow, run, step and component tags.
+        │   ├── MissionTraceTags.java
+        │   // Redacted downstream invocation logging.
+        │   └── ToolCallLogger.java
+        │
+        ├── planning
+        │   // Typed objective, targets, output intent and source requirements.
+        │   ├── MissionIntent.java
+        │   // Current or revised plan containing the next authorized decision.
+        │   ├── MissionPlan.java
+        │   // Validates dependencies, cycles, policy, supported steps and budgets.
+        │   ├── PlanValidator.java
+        │   // One logical hop with dependencies and expected output.
+        │   ├── PlannedStep.java
+        │   // Sole logical step-kind authority consumed by the evidence service.
+        │   └── StepKind.java
+        │
+        ├── prompts
+        │   // Loads versioned prompt templates.
+        │   ├── PromptPack.java
+        │   // Freezes rendered prompt and template versions.
+        │   ├── PromptSnapshot.java
+        │   // Schemas for intent, plan, observation, synthesis and review.
+        │   └── StructuredOutputSchemas.java
+        │
+        ├── runtime
+        │   ├── checkpoint
+        │   │   // Reference to a large externally persisted payload/result.
+        │   │   ├── CheckpointRef.java
+        │   │   // Stable versioned snapshot serialization.
+        │   │   ├── CheckpointSerializer.java
+        │   │   // Frozen large payload, observation or final-result snapshot.
+        │   │   ├── CheckpointSnapshot.java
+        │   │   // External snapshot persistence port.
+        │   │   // Temporal history remains execution authority.
+        │   │   └── CheckpointStore.java
+        │   │
+        │   ├── gate
+        │   │   // Builds reviewer-safe gate payloads.
+        │   │   ├── ApprovalPayloadBuilder.java
+        │   │   // Activity-side gate authorization and persistence.
+        │   │   // It does not requeue or directly resume work.
+        │   │   ├── ApprovalService.java
+        │   │   // Auditable gate aggregate.
+        │   │   ├── HumanGate.java
+        │   │   // OPEN, APPROVED, REJECTED or EXPIRED.
+        │   │   └── HumanGateStatus.java
+        │   │
+        │   ├── model
+        │   │   // Public/logical step state.
+        │   │   // No LEASED value remains.
+        │   │   └── StepStatus.java
+        │   │
+        │   └── store
+        │       // Human-gate persistence port.
+        │       ├── HumanGateStore.java
+        │       // Public progress-event persistence and resume-token port.
+        │       └── RuntimeEventStore.java
+        │
+        ├── steps
+        │   // Validates and executes document evidence inside MissionEvidenceService.
+        │   ├── BuildDocumentEvidenceStep.java
+        │   // Resolves/uploads input artifacts before the Temporal Workflow starts.
+        │   ├── PrepareInputArtifactsStep.java
+        │   // Compatibility wrapper over ApprovalService; approval waiting is durable.
+        │   ├── RequestHumanApprovalStep.java
+        │   // Validates and executes Internal Service capabilities for MissionAgent.
+        │   ├── ResolveInternalContextStep.java
+        │   // Optional domain grounding validator retained outside Temporal state.
+        │   └── VerifyGroundingStep.java
+        │
+        ├── temporal
+        │   ├── activity
+        │   │   // Recovery-only Activity contract: run complete Embabel mission,
+        │   │   // open/record durable gates and cancel terminal missions.
+        │   │   ├── MissionActivities.java
+        │   │   // Hydrates input refs, invokes Embabel once, persists terminal result.
+        │   │   // Temporal retries this whole Activity after recoverable failure.
+        │   │   └── MissionActivitiesImpl.java
+        │   │
+        │   ├── client
+        │   │   // Sole WorkflowClient facade.
+        │   │   // Owns stable Workflow IDs, start-or-get and approve/reject/cancel Updates.
+        │   │   └── TemporalMissionClient.java
+        │   │
+        │   ├── model
+        │   │   // Stable approve/reject/cancel Update payloads.
+        │   │   // RequestContext.request_id becomes the Temporal Update ID.
+        │   │   ├── MissionWorkflowCommand.java
+        │   │   // Small initial input containing IDs, snapshot references,
+        │   │   // frozen policy version and budget—not raw artifact bytes.
+        │   │   ├── MissionWorkflowInput.java
+        │   │   // Final result/error reference and terminal timestamps.
+        │   │   ├── MissionWorkflowOutcome.java
+        │   │   // Minimal recovery/wait state: status, gate, approvals, timestamps,
+        │   │   // result ref, cancellation and processed Update IDs—no Embabel state.
+        │   │   └── MissionWorkflowState.java
+        │   │
+        │   └── workflow
+        │       // @WorkflowInterface containing:
+        │       // run Workflow method; approve/reject/cancel Updates; state Query.
+        │       ├── MissionWorkflow.java
+        │       // Deterministic recovery shell:
+        │       // optional preflight approval → one retryable Embabel Activity → terminal result.
+        │       // Owns retries, cancellation and durable waiting only.
+        │       └── MissionWorkflowImpl.java
+        │
+        ├── tools
+        │   ├── document
+        │   │   // Normalizes Document Service output into EvidenceRef records.
+        │   │   ├── DocumentEvidenceMapper.java
+        │   │   // Builds BuildDocumentEvidence requests.
+        │   │   ├── DocumentEvidenceRequestBuilder.java
+        │   │   // Uploads artifacts and monitors ingestion.
+        │   │   ├── DocumentIngestionTool.java
+        │   │   // Builds direct span-search requests.
+        │   │   ├── DocumentSpanSearchRequestBuilder.java
+        │   │   // Mission-facing Document Service abstraction.
+        │   │   ├── DocumentTool.java
+        │   │   // Builds UploadDocument requests.
+        │   │   └── UploadDocumentRequestBuilder.java
+        │   │
+        │   └── internal
+        │       // Normalizes Internal Service entities/graphs into evidence.
+        │       ├── InternalContextMapper.java
+        │       // Mission-facing Internal Service abstraction.
+        │       ├── InternalContextTool.java
+        │       // Builds entity-search requests.
+        │       ├── InternalEntitySearchRequestBuilder.java
+        │       // Builds company and learning graph requests.
+        │       └── InternalGraphRequestBuilder.java
+        │
+        ├── util
+        │   // Stable hashing for request fingerprints and payload identity.
+        │   ├── Hashing.java
+        │   // Stable Workflow, Activity side-effect, event and tool idempotency keys.
+        │   ├── IdempotencyKeys.java
+        │   // Canonical JSON helpers.
+        │   ├── Jsons.java
+        │   // Java/protobuf time conversion.
+        │   ├── ProtoTimestamps.java
+        │   // Downstream deadline helpers; never performs retries.
+        │   └── Timeouts.java
+        │
+        └── validation
+            // Validates artifact mode, type, hash and size.
+            ├── ArtifactValidator.java
+            // Validates Document/Internal outputs before snapshot persistence.
+            ├── DownstreamResponseValidator.java
+            // Validates final claim/evidence coverage.
+            ├── GroundingValidator.java
+            // Validates normalized request, exact proto budgets and constraints.
+            ├── MissionRequestValidator.java
+            // Performs bounded malformed-output repair.
+            ├── OutputRepair.java
+            // Validates intent, plan, observation and result schemas.
+            └── StructuredOutputValidator.java

@@ -8,6 +8,17 @@ It exposes gRPC operations for submitting missions, streaming progress, retrievi
 
 Commands and queries use the shared `CommandBus`, `QueryBus`, and `EventBus`.
 
+### Service Structure
+
+The detailed commented source tree is maintained in `agentic-tree.txt`.
+
+It provides a file-level walkthrough of the Agentic Service, mapping packages, major classes, 
+component responsibilities, and how each part participates in the end-to-end mission execution flow.
+
+The file is designed to be fed into an LLM as structured architectural context so the model can 
+explain the service, trace execution paths, identify component responsibilities, and reason about 
+how the implementation maps to the architecture described below.  
+
 ## Implementation Progress
 
 🟩 **Mission API, lifecycle and persistence** ██████████ **100%**
