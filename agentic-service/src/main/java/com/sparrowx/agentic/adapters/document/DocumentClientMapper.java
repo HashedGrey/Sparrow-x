@@ -1,5 +1,6 @@
 package com.sparrowx.agentic.adapters.document;
 
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.document.proto.RequestContext;
 import io.grpc.Metadata;
 

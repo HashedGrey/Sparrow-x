@@ -2,7 +2,7 @@ package com.sparrowx.agentic.grpc;
 
 import buildingblocks.core.commands.CommandBus;
 import buildingblocks.core.queries.QueryBus;
-import com.sparrowx.agentic.config.SecurityConfig;
+import com.sparrowx.agentic.config.SecurityConfig.CallerIdentityProvider;
 import com.sparrowx.agentic.config.SecurityConfig.ReviewerAuthorizationPolicy;
 import com.sparrowx.agentic.features.streammissionprogress.MissionEventCursor;
 import com.sparrowx.agentic.features.streammissionprogress.MissionProgressEventView;
@@ -14,6 +14,7 @@ import com.sparrowx.agentic.proto.ApproveMissionGateResponse;
 import com.sparrowx.agentic.proto.CancelMissionRequest;
 import com.sparrowx.agentic.proto.CancelMissionResponse;
 import com.sparrowx.agentic.proto.GetMissionResultRequest;
+import com.sparrowx.agentic.proto.MissionProgressEvent;
 import com.sparrowx.agentic.proto.MissionResultResponse;
 import com.sparrowx.agentic.proto.RejectMissionGateRequest;
 import com.sparrowx.agentic.proto.RejectMissionGateResponse;
@@ -23,7 +24,6 @@ import com.sparrowx.agentic.proto.SubmitMissionResponse;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import org.springframework.grpc.server.service.GrpcService;
-import com.sparrowx.agentic.config.SecurityConfig.CallerIdentityProvider;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -89,6 +89,13 @@ public final class AgenticServiceGrpcImpl
             SubmitMissionRequest request,
             StreamObserver<SubmitMissionResponse> responseObserver
     ) {
+        System.out.println(
+                ">>> GRPC BODY requestId=["
+                        + request.getContext().getRequestId()
+                        + "] traceId=["
+                        + request.getContext().getTraceId()
+                        + "]"
+        );
         unary(
                 responseObserver,
                 () -> agenticMapper.toSubmitMissionResponse(
@@ -102,6 +109,58 @@ public final class AgenticServiceGrpcImpl
     }
 
     @Override
+    public void streamMissionProgress(
+            StreamMissionProgressRequest request,
+            StreamObserver<MissionProgressEvent> responseObserver
+    ) {
+        final MissionEventCursor cursor;
+
+        try {
+            cursor = queryBus.dispatch(
+                    agenticMapper.toStreamMissionProgressQuery(
+                            request
+                    )
+            );
+        } catch (Throwable throwable) {
+            responseObserver.onError(
+                    exceptionHandler.toStatusRuntimeException(
+                            throwable
+                    )
+            );
+            return;
+        }
+
+        AtomicBoolean responseFinished =
+                new AtomicBoolean(false);
+
+        ServerCallStreamObserver<MissionProgressEvent>
+                serverObserver =
+                asServerObserver(responseObserver);
+
+        if (serverObserver != null) {
+            serverObserver.setOnCancelHandler(
+                    cursor::close
+            );
+        }
+
+        Thread.ofVirtual()
+                .name(
+                        "agentic-progress-"
+                                + normalizeThreadName(
+                                request.getMissionId()
+                        )
+                )
+                .start(
+                        () -> streamCursor(
+                                cursor,
+                                serverObserver,
+                                responseObserver,
+                                responseFinished
+                        )
+                );
+    }
+
+    @Override
     public void getMissionResult(
             GetMissionResultRequest request,
             StreamObserver<MissionResultResponse> responseObserver
@@ -110,9 +169,10 @@ public final class AgenticServiceGrpcImpl
                 responseObserver,
                 () -> agenticMapper.toMissionResultResponse(
                         queryBus.dispatch(
-                                agenticMapper.toGetMissionResultQuery(
-                                        request
-                                )
+                                agenticMapper
+                                        .toGetMissionResultQuery(
+                                                request
+                                        )
                         )
                 )
         );
@@ -127,9 +187,10 @@ public final class AgenticServiceGrpcImpl
                 responseObserver,
                 () -> agenticMapper.toCancelMissionResponse(
                         commandBus.dispatch(
-                                agenticMapper.toCancelMissionCommand(
-                                        request
-                                )
+                                agenticMapper
+                                        .toCancelMissionCommand(
+                                                request
+                                        )
                         )
                 )
         );
@@ -147,18 +208,16 @@ public final class AgenticServiceGrpcImpl
                             identityProvider.currentIdentity()
                     );
 
-                    return agenticMapper.toApproveMissionGateResponse(
-                            commandBus.dispatch(
-                                    agenticMapper
-                                            .toApproveMissionGateCommand(
-                                                    request
-                                            )
-                            )
-                    );
+                    return agenticMapper
+                            .toApproveMissionGateResponse(
+                                    commandBus.dispatch(
+                                            agenticMapper
+                                                    .toApproveMissionGateCommand(
+                                                            request
+                                                    )
+                                    )
+                            );
                 }
-        );
-        reviewerPolicy.requireReviewer(
-                identityProvider.currentIdentity()
         );
     }
 
@@ -174,67 +233,24 @@ public final class AgenticServiceGrpcImpl
                             identityProvider.currentIdentity()
                     );
 
-                    return agenticMapper.toRejectMissionGateResponse(
-                            commandBus.dispatch(
-                                    agenticMapper
-                                            .toRejectMissionGateCommand(
-                                                    request
-                                            )
-                            )
-                    );
+                    return agenticMapper
+                            .toRejectMissionGateResponse(
+                                    commandBus.dispatch(
+                                            agenticMapper
+                                                    .toRejectMissionGateCommand(
+                                                            request
+                                                    )
+                                    )
+                            );
                 }
         );
     }
 
-    @Override
-    public void streamMissionProgress(
-            StreamMissionProgressRequest request,
-            StreamObserver<com.sparrowx.agentic.proto.MissionProgressEvent>
-                    responseObserver
-    ) {
-        final MissionEventCursor cursor;
-
-        try {
-            cursor = queryBus.dispatch(
-                    agenticMapper.toStreamMissionProgressQuery(request)
-            );
-        } catch (Throwable throwable) {
-            responseObserver.onError(
-                    exceptionHandler.toStatusRuntimeException(throwable)
-            );
-            return;
-        }
-
-        AtomicBoolean responseFinished = new AtomicBoolean(false);
-        ServerCallStreamObserver<
-                com.sparrowx.agentic.proto.MissionProgressEvent
-                > serverObserver = asServerObserver(responseObserver);
-
-        if (serverObserver != null) {
-            serverObserver.setOnCancelHandler(cursor::close);
-        }
-
-        Thread.ofVirtual()
-                .name(
-                        "agentic-progress-"
-                                + normalizeThreadName(
-                                request.getMissionId()
-                        )
-                )
-                .start(() -> streamCursor(
-                        cursor,
-                        serverObserver,
-                        responseObserver,
-                        responseFinished
-                ));
-    }
-
     private void streamCursor(
             MissionEventCursor cursor,
-            ServerCallStreamObserver<
-                    com.sparrowx.agentic.proto.MissionProgressEvent
-                    > serverObserver,
-            StreamObserver<com.sparrowx.agentic.proto.MissionProgressEvent>
+            ServerCallStreamObserver<MissionProgressEvent>
+                    serverObserver,
+            StreamObserver<MissionProgressEvent>
                     responseObserver,
             AtomicBoolean responseFinished
     ) {
@@ -247,7 +263,9 @@ public final class AgenticServiceGrpcImpl
 
                 if (next.isPresent()) {
                     responseObserver.onNext(
-                            eventMapper.toProto(next.orElseThrow())
+                            eventMapper.toProto(
+                                    next.orElseThrow()
+                            )
                     );
                 }
 
@@ -268,10 +286,15 @@ public final class AgenticServiceGrpcImpl
             );
         } catch (Throwable throwable) {
             if (!isCancelled(serverObserver)
-                    && responseFinished.compareAndSet(false, true)) {
+                    && responseFinished.compareAndSet(
+                    false,
+                    true
+            )) {
                 responseObserver.onError(
                         exceptionHandler
-                                .toStatusRuntimeException(throwable)
+                                .toStatusRuntimeException(
+                                        throwable
+                                )
                 );
             }
         }
@@ -285,6 +308,10 @@ public final class AgenticServiceGrpcImpl
                 responseObserver,
                 "responseObserver must not be null"
         );
+        Objects.requireNonNull(
+                invocation,
+                "invocation must not be null"
+        );
 
         try {
             T response = Objects.requireNonNull(
@@ -296,21 +323,26 @@ public final class AgenticServiceGrpcImpl
             responseObserver.onCompleted();
         } catch (Throwable throwable) {
             responseObserver.onError(
-                    exceptionHandler.toStatusRuntimeException(throwable)
+                    exceptionHandler
+                            .toStatusRuntimeException(
+                                    throwable
+                            )
             );
         }
     }
 
     private static void complete(
-            StreamObserver<com.sparrowx.agentic.proto.MissionProgressEvent>
+            StreamObserver<MissionProgressEvent>
                     responseObserver,
             AtomicBoolean responseFinished,
-            ServerCallStreamObserver<
-                    com.sparrowx.agentic.proto.MissionProgressEvent
-                    > serverObserver
+            ServerCallStreamObserver<MissionProgressEvent>
+                    serverObserver
     ) {
         if (!isCancelled(serverObserver)
-                && responseFinished.compareAndSet(false, true)) {
+                && responseFinished.compareAndSet(
+                false,
+                true
+        )) {
             responseObserver.onCompleted();
         }
     }
@@ -318,32 +350,36 @@ public final class AgenticServiceGrpcImpl
     private static boolean isCancelled(
             ServerCallStreamObserver<?> observer
     ) {
-        return observer != null && observer.isCancelled();
+        return observer != null
+                && observer.isCancelled();
     }
 
     @SuppressWarnings("unchecked")
-    private static ServerCallStreamObserver<
-            com.sparrowx.agentic.proto.MissionProgressEvent
-            > asServerObserver(
-            StreamObserver<
-                    com.sparrowx.agentic.proto.MissionProgressEvent
-                    > observer
+    private static ServerCallStreamObserver<MissionProgressEvent>
+    asServerObserver(
+            StreamObserver<MissionProgressEvent> observer
     ) {
-        if (observer instanceof ServerCallStreamObserver<?> server) {
-            return (ServerCallStreamObserver<
-                    com.sparrowx.agentic.proto.MissionProgressEvent
-                    >) server;
+        if (observer
+                instanceof ServerCallStreamObserver<?> server) {
+
+            return (ServerCallStreamObserver<MissionProgressEvent>)
+                    server;
         }
 
         return null;
     }
 
-    private static String normalizeThreadName(String value) {
+    private static String normalizeThreadName(
+            String value
+    ) {
         if (value == null || value.isBlank()) {
             return "unknown";
         }
 
-        return value.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return value.replaceAll(
+                "[^a-zA-Z0-9._-]",
+                "_"
+        );
     }
 
     @FunctionalInterface

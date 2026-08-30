@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.adapters.document;
 
 import com.sparrowx.agentic.adapters.document.DocumentClientResiliencePolicy.Operation;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.document.proto.BuildDocumentEvidenceRequest;
 import com.sparrowx.document.proto.BuildDocumentEvidenceResponse;
 import com.sparrowx.document.proto.DocumentServiceGrpc;

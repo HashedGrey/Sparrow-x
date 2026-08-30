@@ -1,5 +1,6 @@
 package com.sparrowx.agentic.adapters.internal;
 
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.internal.grpc.RequestContext;
 import io.grpc.Metadata;
 
@@ -9,6 +10,17 @@ public final class InternalClientMapper {
 
     private static final String AGENTIC_SERVICE = "agentic-service";
 
+    private static final Metadata.Key<String> INTERNAL_HEADER =
+            Metadata.Key.of("x-internal-call", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> USER_ID_HEADER =
+            Metadata.Key.of("x-user-id", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> AUTH_TENANT_ID_HEADER =
+            Metadata.Key.of("x-tenant-id", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> ROLES_HEADER =
+            Metadata.Key.of("x-roles", Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> REQUEST_ID_HEADER =
             Metadata.Key.of("x-sparrowx-request-id", Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> TENANT_ID_HEADER =
@@ -53,6 +65,13 @@ public final class InternalClientMapper {
         requestId = requireText(requestId, "requestId");
 
         Metadata metadata = new Metadata();
+        metadata.put(INTERNAL_HEADER, "true");
+        metadata.put(AUTH_TENANT_ID_HEADER, context.tenantId());
+        putIfPresent(
+                metadata,
+                USER_ID_HEADER,
+                context.userId()
+        );
         metadata.put(REQUEST_ID_HEADER, requestId);
         metadata.put(TENANT_ID_HEADER, context.tenantId());
 
@@ -60,7 +79,8 @@ public final class InternalClientMapper {
         putIfPresent(metadata, PROJECT_ID_HEADER, context.projectId());
         putIfPresent(metadata, TEAM_ID_HEADER, context.teamId());
         putIfPresent(metadata, TRACE_ID_HEADER, context.traceId());
-        putIfPresent(metadata, CALLER_SERVICE_HEADER, callerService(context));
+        metadata.put(CALLER_SERVICE_HEADER, AGENTIC_SERVICE);
+
 
         return metadata;
     }
@@ -70,12 +90,6 @@ public final class InternalClientMapper {
         return toMetadata(context, context.requestId());
     }
 
-    private static String callerService(MissionContext context) {
-        String callerService = context.callerService();
-        return callerService == null || callerService.isBlank()
-                ? AGENTIC_SERVICE
-                : callerService;
-    }
 
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {

@@ -2,6 +2,7 @@ package com.sparrowx.agentic.mappers;
 
 import buildingblocks.shared.context.AuthContext;
 import com.sparrowx.agentic.grpc.interceptors.GrpcTenantContextInterceptor;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.proto.RequestContext;
 import org.springframework.stereotype.Component;
 
@@ -63,8 +64,12 @@ public final class RequestContextGrpcMapper {
             String requestTenantId
     ) {
         String transportTenantId =
-                GrpcTenantContextInterceptor
-                        .currentTenantIdOrNull();
+                GrpcTenantContextInterceptor.currentTenantIdOrNull();
+
+        System.out.println(
+                "TENANT COMPARE request=[" + requestTenantId
+                        + "] transport=[" + transportTenantId + "]"
+        );
 
         if (transportTenantId != null
                 && !transportTenantId.equals(requestTenantId)) {

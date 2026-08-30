@@ -11,7 +11,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import org.springframework.stereotype.Component;
 
-@Component
+
 public final class GrpcTenantContextInterceptor
         implements ServerInterceptor {
 
@@ -49,6 +49,11 @@ public final class GrpcTenantContextInterceptor
 
         Context context = Context.current()
                 .withValue(TENANT_ID, tenantId);
+
+        System.out.println(
+                ">>> TENANT HIT ctx=" +
+                        GrpcAuthInterceptor.REQUEST_CTX_KEY.get()
+        );
 
         return Contexts.interceptCall(
                 context,

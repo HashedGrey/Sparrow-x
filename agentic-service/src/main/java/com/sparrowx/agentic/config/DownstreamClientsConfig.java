@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.config;
 
 import com.sparrowx.agentic.adapters.document.DocumentClientResiliencePolicy;
+import com.sparrowx.agentic.adapters.internal.InternalClientResiliencePolicy;
 import com.sparrowx.document.proto.DocumentServiceGrpc;
 import com.sparrowx.internal.grpc.InternalServiceGrpc;
 import io.grpc.ManagedChannel;
@@ -22,6 +23,20 @@ import java.util.Map;
  */
 @Configuration(proxyBeanMethods = false)
 public final class DownstreamClientsConfig {
+
+    @Bean
+    public InternalClientResiliencePolicy internalClientResiliencePolicy() {
+        return new InternalClientResiliencePolicy(
+                Map.of(
+                        InternalClientResiliencePolicy.Operation.SEARCH_INTERNAL_ENTITIES,
+                        Duration.ofSeconds(3),
+                        InternalClientResiliencePolicy.Operation.READ_INTERNAL_COMPANY_GRAPH,
+                        Duration.ofSeconds(5),
+                        InternalClientResiliencePolicy.Operation.READ_LEARNING_GRAPH,
+                        Duration.ofSeconds(5)
+                )
+        );
+    }
 
     @Bean(
             name = "documentManagedChannel",

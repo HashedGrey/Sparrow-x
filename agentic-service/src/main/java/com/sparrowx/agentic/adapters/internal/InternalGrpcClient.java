@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.adapters.internal;
 
 import com.sparrowx.agentic.adapters.internal.InternalClientResiliencePolicy.Operation;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.internal.grpc.InternalServiceGrpc;
 import com.sparrowx.internal.grpc.ReadInternalCompanyGraphRequest;
 import com.sparrowx.internal.grpc.ReadInternalCompanyGraphResponse;
