@@ -1,9 +1,12 @@
 package com.sparrowx.agentic.exceptions;
 
+import lombok.Getter;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Getter
 public class AgenticServiceException extends RuntimeException {
 
     private static final String DEFAULT_CODE = "AGENTIC_SERVICE_ERROR";
@@ -58,23 +61,11 @@ public class AgenticServiceException extends RuntimeException {
         return code;
     }
 
-    public String getCode() {
-        return code;
-    }
-
     public boolean retryable() {
         return retryable;
     }
 
-    public boolean isRetryable() {
-        return retryable;
-    }
-
     public Map<String, Object> details() {
-        return details;
-    }
-
-    public Map<String, Object> getDetails() {
         return details;
     }
 
