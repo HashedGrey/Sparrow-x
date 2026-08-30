@@ -29,13 +29,13 @@ public final class GetMissionResultQueryHandler
                 query.missionId()
         );
 
-        if (view == null || view.result() == null) {
+        if (view == null) {
             throw new AgenticServiceException(
                     "Mission result service returned no result view."
             );
         }
 
-        if (!query.missionId().equals(view.result().missionId())) {
+        if (!query.missionId().equals(view.missionId())) {
             throw new AgenticServiceException(
                     "Mission result belongs to a different mission."
             );

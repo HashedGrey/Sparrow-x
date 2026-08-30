@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.features.cancelmission;
 
 import buildingblocks.core.commands.Command;
+import com.sparrowx.agentic.mission.model.MissionContext;
 
 import java.util.Objects;
 

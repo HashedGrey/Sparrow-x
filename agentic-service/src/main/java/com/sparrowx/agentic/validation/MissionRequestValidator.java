@@ -2,6 +2,8 @@ package com.sparrowx.agentic.validation;
 
 import com.sparrowx.agentic.mission.artifact.InputArtifact;
 import com.sparrowx.agentic.mission.model.MissionBudget;
+import com.sparrowx.agentic.mission.model.MissionConstraints;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.mission.model.MissionRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

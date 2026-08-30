@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.features.cancelmission;
 
 import buildingblocks.core.commands.CommandHandler;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.mission.model.MissionStatus;
 import com.sparrowx.agentic.temporal.client.TemporalMissionClient;
 import com.sparrowx.agentic.temporal.model.MissionWorkflowCommand;

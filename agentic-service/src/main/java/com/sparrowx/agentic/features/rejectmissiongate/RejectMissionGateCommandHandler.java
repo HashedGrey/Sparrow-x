@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.features.rejectmissiongate;
 
 import buildingblocks.core.commands.CommandHandler;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.temporal.client.TemporalMissionClient;
 import com.sparrowx.agentic.temporal.model.MissionWorkflowCommand;
 import com.sparrowx.agentic.temporal.model.MissionWorkflowState;

@@ -19,25 +19,16 @@ import com.sparrowx.agentic.features.submitmission.SubmitMissionResult;
 import com.sparrowx.agentic.governance.model.GovernanceDecision;
 import com.sparrowx.agentic.mission.evidence.Citation;
 import com.sparrowx.agentic.mission.evidence.EvidenceRef;
+import com.sparrowx.agentic.mission.model.*;
 import com.sparrowx.agentic.mission.model.Finding;
 import com.sparrowx.agentic.mission.model.MissionPath;
 import com.sparrowx.agentic.mission.model.MissionResult;
 import com.sparrowx.agentic.mission.model.MissionStatus;
 import com.sparrowx.agentic.mission.model.Recommendation;
 import com.sparrowx.agentic.mission.model.ResultSection;
-import com.sparrowx.agentic.proto.ApproveMissionGateRequest;
-import com.sparrowx.agentic.proto.ApproveMissionGateResponse;
-import com.sparrowx.agentic.proto.CancelMissionRequest;
-import com.sparrowx.agentic.proto.CancelMissionResponse;
-import com.sparrowx.agentic.proto.GetMissionResultRequest;
+import com.sparrowx.agentic.proto.*;
 import com.sparrowx.agentic.proto.InputArtifact.ContentCase;
 import com.sparrowx.agentic.proto.MissionProgressEvent;
-import com.sparrowx.agentic.proto.MissionResultResponse;
-import com.sparrowx.agentic.proto.RejectMissionGateRequest;
-import com.sparrowx.agentic.proto.RejectMissionGateResponse;
-import com.sparrowx.agentic.proto.StreamMissionProgressRequest;
-import com.sparrowx.agentic.proto.SubmitMissionRequest;
-import com.sparrowx.agentic.proto.SubmitMissionResponse;
 import com.sparrowx.agentic.util.ProtoTimestamps;
 import io.grpc.StatusRuntimeException;
 import org.springframework.stereotype.Component;
@@ -149,19 +140,36 @@ public final class AgenticMapper {
     ) {
         Objects.requireNonNull(view, "view must not be null");
 
-        MissionResult result = Objects.requireNonNull(
-                view.result(),
-                "view.result must not be null"
-        );
+        MissionResultResponse.Builder builder =
+                MissionResultResponse.newBuilder()
+                        .setMissionId(view.missionId())
+                        .setStatus(toProtoStatus(view.status()));
 
-        return MissionResultResponse.newBuilder()
-                .setMissionId(result.missionId())
-                .setStatus(
-                        com.sparrowx.agentic.proto.MissionStatus
-                                .MISSION_STATUS_COMPLETED
-                )
-                .setResult(toProtoMissionResult(result))
-                .build();
+        if (view.result() != null) {
+            builder.setResult(
+                    toProtoMissionResult(view.result())
+            );
+        }
+
+        if (view.error() != null) {
+            builder.setError(
+                    errorGrpcMapper.toProto(view.error())
+            );
+        }
+
+        if (view.waitState() != null) {
+            builder.setWaitState(
+                    toProtoHumanGate(view.waitState())
+            );
+        }
+
+        if (view.completedAt() != null) {
+            builder.setCompletedAt(
+                    ProtoTimestamps.toProto(view.completedAt())
+            );
+        }
+
+        return builder.build();
     }
 
     public StreamMissionProgressQuery
@@ -185,6 +193,39 @@ public final class AgenticMapper {
                 request.getMissionId(),
                 request.getResumeToken()
         );
+    }
+
+    public HumanGate toProtoHumanGate(
+            HumanGateState state
+    ) {
+        Objects.requireNonNull(state, "state must not be null");
+
+        HumanGate.Builder builder =
+                HumanGate.newBuilder()
+                        .setGateId(state.gateId())
+                        .setMissionId(state.missionId())
+                        .setTitle(state.title())
+                        .setReason(state.reason())
+                        .addAllRequiredReviewerRoles(
+                                state.requiredReviewerRoles()
+                        )
+                        .setReviewPayload(
+                                toStruct(state.reviewPayload())
+                        );
+
+        if (state.createdAt() != null) {
+            builder.setCreatedAt(
+                    ProtoTimestamps.toProto(state.createdAt())
+            );
+        }
+
+        if (state.expiresAt() != null) {
+            builder.setExpiresAt(
+                    ProtoTimestamps.toProto(state.expiresAt())
+            );
+        }
+
+        return builder.build();
     }
 
     public MissionProgressEvent toMissionProgressEvent(

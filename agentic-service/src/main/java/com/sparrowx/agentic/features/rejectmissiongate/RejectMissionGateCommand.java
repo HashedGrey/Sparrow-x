@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.features.rejectmissiongate;
 
 import buildingblocks.core.commands.Command;
+import com.sparrowx.agentic.mission.model.MissionContext;
 
 public record RejectMissionGateCommand(
         MissionContext context,

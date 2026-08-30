@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.features.cancelmission;
 
 import com.sparrowx.agentic.exceptions.MissionValidationException;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import org.springframework.stereotype.Component;
 
 @Component
