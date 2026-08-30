@@ -20,7 +20,27 @@ otelcol.receiver.otlp "default" {
 
 otelcol.processor.batch "traces" {
   output {
-    traces = [otelcol.exporter.otlp.tempo.input]
+    traces = [
+        otelcol.exporter.otlp.tempo.input,
+        otelcol.exporter.otlphttp.langfuse.input,]
+  }
+}
+
+otelcol.auth.basic "langfuse" {
+
+    username = sys.env("LANGFUSE_PUBLIC_KEY")
+    password = sys.env("LANGFUSE_SECRET_KEY")
+
+}
+
+otelcol.exporter.otlphttp "langfuse" {
+  client {
+    endpoint = "https://cloud.langfuse.com/api/public/otel"
+    auth     = otelcol.auth.basic.langfuse.handler
+
+    headers = {
+      "x-langfuse-ingestion-version" = "4",
+    }
   }
 }
 
@@ -38,13 +58,10 @@ otelcol.exporter.otlp "tempo" {
 loki.source.file "services" {
   targets = [
     {
-      __path__ = "/var/log/services/tweet-service.log",
-      service  = "tweet-service",
+      __path__ = "/var/log/services/agentic-service.log",
+      service  = "agentic-service",
     },
-    {
-      __path__ = "/var/log/services/api-gateway-service.log",
-      service  = "api-gateway-service",
-    },
+
   ]
 
   forward_to = [loki.process.logs.receiver]
@@ -56,13 +73,17 @@ loki.process "logs" {
     expression = "trace=(?P<traceID>[a-f0-9]+) span=(?P<spanID>[a-f0-9]+)"
   }
 
-  stage.labels {
-    values = {
-      traceID = "",
-      spanID  = "",
-      service = "",
+  stage.structured_metadata {
+      values = {
+        traceID = "",
+        spanID  = "",
+      }
     }
-  }
+  stage.labels {
+      values = {
+        service = "",
+      }
+    }
 
   forward_to = [loki.write.loki.receiver]
 }
