@@ -2,6 +2,7 @@ package com.sparrowx.agentic.actions.document;
 
 import com.embabel.agent.api.annotation.Action;
 import com.google.protobuf.Timestamp;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.document.DocumentIngestionTool;
 import com.sparrowx.document.proto.GetIngestionJobResponse;
 import com.sparrowx.document.proto.IngestionJobProto;

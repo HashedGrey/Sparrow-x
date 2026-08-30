@@ -2,6 +2,7 @@ package com.sparrowx.agentic.actions.internal;
 
 import com.embabel.agent.api.annotation.Action;
 import com.sparrowx.agentic.mission.evidence.EvidenceRef;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.internal.InternalContextMapper;
 import com.sparrowx.agentic.tools.internal.InternalContextTool;
 import com.sparrowx.agentic.tools.internal.InternalGraphRequestBuilder;

@@ -2,6 +2,7 @@ package com.sparrowx.agentic.actions.document;
 
 import com.embabel.agent.api.annotation.Action;
 import com.sparrowx.agentic.mission.evidence.EvidenceRef;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.document.DocumentEvidenceMapper;
 import com.sparrowx.agentic.tools.document.DocumentSpanSearchRequestBuilder;
 import com.sparrowx.agentic.tools.document.DocumentSpanSearchRequestBuilder.SearchSpec;

@@ -2,6 +2,7 @@ package com.sparrowx.agentic.actions.document;
 
 import com.embabel.agent.api.annotation.Action;
 import com.sparrowx.agentic.adapters.document.DocumentClientMapper;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.document.DocumentTool;
 import com.sparrowx.document.proto.DocumentEvidenceGraphProto;
 import com.sparrowx.document.proto.VerificationStatusProto;

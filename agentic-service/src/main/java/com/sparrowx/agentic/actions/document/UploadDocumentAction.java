@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.actions.document;
 
 import com.embabel.agent.api.annotation.Action;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.document.DocumentIngestionTool;
 import com.sparrowx.agentic.tools.document.UploadDocumentRequestBuilder;
 import com.sparrowx.agentic.tools.document.UploadDocumentRequestBuilder.UploadSpec;
