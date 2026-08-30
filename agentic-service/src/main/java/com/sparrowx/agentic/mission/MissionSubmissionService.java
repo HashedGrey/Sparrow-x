@@ -1,4 +1,4 @@
-﻿package com.sparrowx.agentic.mission;
+package com.sparrowx.agentic.mission;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -6,12 +6,7 @@ import com.sparrowx.agentic.exceptions.MissionValidationException;
 import com.sparrowx.agentic.governance.BudgetPolicy;
 import com.sparrowx.agentic.mission.artifact.ArtifactPreparationResult;
 import com.sparrowx.agentic.mission.artifact.InputArtifact;
-import com.sparrowx.agentic.mission.model.Mission;
-import com.sparrowx.agentic.mission.model.MissionBudget;
-import com.sparrowx.agentic.mission.model.MissionPath;
-import com.sparrowx.agentic.mission.model.MissionRequest;
-import com.sparrowx.agentic.mission.model.MissionStatus;
-import com.sparrowx.agentic.mission.model.MissionVersionSnapshot;
+import com.sparrowx.agentic.mission.model.*;
 import com.sparrowx.agentic.mission.store.MissionStore;
 import com.sparrowx.agentic.runtime.checkpoint.CheckpointRef;
 import com.sparrowx.agentic.runtime.checkpoint.CheckpointSerializer;
@@ -115,17 +110,32 @@ public class MissionSubmissionService {
         String fingerprint = fingerprint(normalizedRequest);
         String tenantId = normalizedRequest.context().tenantId();
         String requestId = normalizedRequest.context().requestId();
+        System.out.println(
+                ">>> SUBMISSION ID tenant=[" + tenantId
+                        + "] requestId=[" + requestId + "]"
+        );
 
         Mission existing = missionStore.findByRequestId(
                 tenantId,
                 requestId
         ).orElse(null);
 
+        System.out.println(
+                ">>> SUBMISSION LOOKUP existingMission=["
+                        + (existing == null ? "null" : existing.missionId())
+                        + "] existingRequestId=["
+                        + (existing == null
+                        ? "null"
+                        : existing.context().requestId())
+                        + "]"
+        );
+
         if (existing != null) {
             verifyFingerprint(existing, fingerprint);
             startOrGet(existing, normalizedRequest);
             return existing;
         }
+
 
         Instant submittedAt = Instant.now();
         String missionId = stableMissionId(tenantId, requestId);

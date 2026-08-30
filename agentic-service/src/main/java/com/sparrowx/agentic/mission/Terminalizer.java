@@ -15,6 +15,7 @@ import com.sparrowx.agentic.runtime.model.StepStatus;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -245,7 +246,7 @@ public class Terminalizer {
 
     private static Instant terminalTime(Mission mission) {
         return mission.completedAt() == null
-                ? Instant.now()
+                ? Instant.now().truncatedTo(ChronoUnit.MICROS)
                 : mission.completedAt();
     }
 

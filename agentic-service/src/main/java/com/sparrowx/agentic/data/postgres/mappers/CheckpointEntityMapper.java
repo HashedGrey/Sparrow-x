@@ -43,7 +43,7 @@ public final class CheckpointEntityMapper {
                 reference.sizeBytes(),
                 jsons.writeBytes(snapshot),
                 reference.metadata(),
-                Instant.now()
+                reference.createdAt()
         );
     }
 

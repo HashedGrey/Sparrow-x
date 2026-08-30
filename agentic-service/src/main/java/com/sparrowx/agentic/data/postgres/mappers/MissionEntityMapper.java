@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparrowx.agentic.data.postgres.entities.MissionEntity;
 import com.sparrowx.agentic.mission.model.Mission;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;

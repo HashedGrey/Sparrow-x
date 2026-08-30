@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.runtime.checkpoint;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Objects;
 
@@ -24,13 +25,22 @@ public record CheckpointRef(
         checkpointId = nullToEmpty(checkpointId);
         tenantId = nullToEmpty(tenantId);
         missionId = nullToEmpty(missionId);
+
         checkpointType = checkpointType == null
                 ? CheckpointType.UNSPECIFIED
                 : checkpointType;
+
         contentType = nullToEmpty(contentType);
         sha256 = nullToEmpty(sha256);
-        createdAt = Objects.requireNonNull(createdAt, "createdAt");
-        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+
+        createdAt = Objects.requireNonNull(
+                createdAt,
+                "createdAt"
+        ).truncatedTo(ChronoUnit.MICROS);
+
+        metadata = metadata == null
+                ? Map.of()
+                : Map.copyOf(metadata);
     }
 
     private static String nullToEmpty(String value) {
