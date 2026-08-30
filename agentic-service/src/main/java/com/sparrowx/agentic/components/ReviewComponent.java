@@ -9,6 +9,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Retained as an LLM review port because the supplied LlmConfig wires its
+ * Reviewer implementation. It is no longer called by Temporal.
+ */
 public final class ReviewComponent {
 
     private final Reviewer reviewer;
@@ -16,15 +20,16 @@ public final class ReviewComponent {
     public ReviewComponent(Reviewer reviewer) {
         this.reviewer = Objects.requireNonNull(
                 reviewer,
-                "reviewer must not be null");
+                "reviewer must not be null"
+        );
     }
 
     public ReviewDecision review(ReviewRequest request) {
         Objects.requireNonNull(request, "request must not be null");
-
         return Objects.requireNonNull(
                 reviewer.review(request),
-                "reviewer returned null");
+                "reviewer returned null"
+        );
     }
 
     @FunctionalInterface
@@ -41,36 +46,34 @@ public final class ReviewComponent {
             Set<String> completedStepIds,
             int remainingToolCalls,
             boolean cancellationRequested,
-            Map<String, Object> attributes) {
-
+            Map<String, Object> attributes
+    ) {
         public ReviewRequest {
             missionId = requireText(missionId, "missionId");
-
             intent = Objects.requireNonNull(
                     intent,
-                    "intent must not be null");
-
+                    "intent must not be null"
+            );
             plan = Objects.requireNonNull(
                     plan,
-                    "plan must not be null");
-
+                    "plan must not be null"
+            );
             executedStep = Objects.requireNonNull(
                     executedStep,
-                    "executedStep must not be null");
-
+                    "executedStep must not be null"
+            );
             observation = Objects.requireNonNull(
                     observation,
-                    "observation must not be null");
-
+                    "observation must not be null"
+            );
             completedStepIds = completedStepIds == null
                     ? Set.of()
                     : Set.copyOf(completedStepIds);
-
             if (remainingToolCalls < 0) {
                 throw new IllegalArgumentException(
-                        "remainingToolCalls must not be negative");
+                        "remainingToolCalls must not be negative"
+                );
             }
-
             attributes = attributes == null
                     ? Map.of()
                     : Map.copyOf(attributes);
@@ -80,15 +83,14 @@ public final class ReviewComponent {
     public record ReviewDecision(
             DecisionType type,
             String reason,
-            Map<String, Object> planHints) {
-
+            Map<String, Object> planHints
+    ) {
         public ReviewDecision {
             type = Objects.requireNonNull(
                     type,
-                    "type must not be null");
-
+                    "type must not be null"
+            );
             reason = reason == null ? "" : reason;
-
             planHints = planHints == null
                     ? Map.of()
                     : Map.copyOf(planHints);
@@ -103,15 +105,12 @@ public final class ReviewComponent {
         FAIL
     }
 
-    private static String requireText(
-            String value,
-            String field) {
-
+    private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(
-                    field + " must not be blank");
+                    field + " must not be blank"
+            );
         }
-
         return value;
     }
 }

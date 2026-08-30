@@ -51,6 +51,7 @@ public final class PlanValidator {
         for (PlannedStep step : plan.steps()) {
             stepsById.put(step.stepId(), step);
 
+
             if (effectiveTools.restricted()
                     && !effectiveTools.capabilities()
                     .contains(step.capability())) {
@@ -58,10 +59,49 @@ public final class PlanValidator {
                         "step uses an unauthorized capability: "
                                 + step.capability());
             }
+            validateArguments(step);
         }
 
         validateDependencies(stepsById);
         validateAcyclic(stepsById);
+    }
+
+    private static void validateArguments(PlannedStep step) {
+        switch (step.kind()) {
+            case SEARCH_INTERNAL_ENTITIES ->
+                    validateInternalSearchArguments(step);
+            default -> {
+            }
+        }
+    }
+
+    private static void validateInternalSearchArguments(PlannedStep step) {
+        Set<String> allowed = Set.of(
+                "query",
+                "allowedNodeTypes",
+                "rootEntityId",
+                "rootNodeType",
+                "depth",
+                "limit",
+                "includeFuzzyMatches",
+                "filters"
+        );
+
+        Set<String> unknown = new HashSet<>(step.arguments().keySet());
+        unknown.removeAll(allowed);
+
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "SEARCH_INTERNAL_ENTITIES contains unsupported arguments: "
+                            + unknown);
+        }
+
+        Object query = step.arguments().get("query");
+
+        if (!(query instanceof String text) || text.isBlank()) {
+            throw new IllegalArgumentException(
+                    "SEARCH_INTERNAL_ENTITIES requires a non-blank query");
+        }
     }
 
     private static void validateDependencies(

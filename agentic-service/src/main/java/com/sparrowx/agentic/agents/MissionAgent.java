@@ -1,219 +1,276 @@
 package com.sparrowx.agentic.agents;
 
+import com.embabel.agent.api.annotation.AchievesGoal;
 import com.embabel.agent.api.annotation.Action;
 import com.embabel.agent.api.annotation.Agent;
+import com.embabel.agent.api.common.OperationContext;
+import com.embabel.agent.core.ActionRetryPolicy;
+import com.sparrowx.agentic.actions.synthesis.BuildCitationsAction;
 import com.sparrowx.agentic.components.IntentComponent;
 import com.sparrowx.agentic.components.IntentComponent.IntentRequest;
 import com.sparrowx.agentic.components.PlanningComponent;
 import com.sparrowx.agentic.components.PlanningComponent.PlanningRequest;
-import com.sparrowx.agentic.components.ReviewComponent;
-import com.sparrowx.agentic.components.ReviewComponent.DecisionType;
-import com.sparrowx.agentic.components.ReviewComponent.ReviewDecision;
-import com.sparrowx.agentic.components.ReviewComponent.ReviewRequest;
 import com.sparrowx.agentic.components.SynthesisComponent;
 import com.sparrowx.agentic.components.SynthesisComponent.SynthesisDraft;
 import com.sparrowx.agentic.components.SynthesisComponent.SynthesisRequest;
-import com.sparrowx.agentic.components.ToolSelectionComponent;
-import com.sparrowx.agentic.components.ToolSelectionComponent.SelectionRequest;
+import com.sparrowx.agentic.mission.model.MissionConstraints;
+import com.sparrowx.agentic.mission.model.MissionResult;
 import com.sparrowx.agentic.planning.MissionIntent;
 import com.sparrowx.agentic.planning.MissionPlan;
-import com.sparrowx.agentic.planning.PlannedStep;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-@Agent(description = "Selects one authorized SparrowX mission action per invocation")
+/**
+ * Complete SparrowX Embabel graph.
+ *
+ * Embabel derives the route from action types:
+ * MissionRunInput -> IntentState -> PlanState -> MissionEvidence -> MissionResult.
+ */
+@Agent(description = "Plans and executes a grounded SparrowX enterprise mission",
+        actionRetryPolicy = ActionRetryPolicy.FIRE_ONCE
+)
 public final class MissionAgent {
+
+    private static final Set<String> SUPPORTED_CAPABILITIES = Set.of(
+            "document.evidence.build",
+            "document.evidence.verify",
+            "internal.entities.search",
+            "internal.company-graph.read",
+            "internal.learning-graph.read",
+            "governance.redaction.apply",
+            "governance.grounding.check",
+            "governance.human-approval.request",
+            "synthesis.citations.build",
+            "synthesis.answer.compose"
+    );
 
     private final IntentComponent intentComponent;
     private final PlanningComponent planningComponent;
-    private final ReviewComponent reviewComponent;
+    private final MissionEvidenceService evidenceService;
     private final SynthesisComponent synthesisComponent;
-    private final ToolSelectionComponent toolSelectionComponent;
+    private final BuildCitationsAction citationsAction;
 
     public MissionAgent(
             IntentComponent intentComponent,
             PlanningComponent planningComponent,
-            ReviewComponent reviewComponent,
+            MissionEvidenceService evidenceService,
             SynthesisComponent synthesisComponent,
-            ToolSelectionComponent toolSelectionComponent) {
-
+            BuildCitationsAction citationsAction
+    ) {
         this.intentComponent = Objects.requireNonNull(
                 intentComponent,
-                "intentComponent must not be null");
-
+                "intentComponent must not be null"
+        );
         this.planningComponent = Objects.requireNonNull(
                 planningComponent,
-                "planningComponent must not be null");
-
-        this.reviewComponent = Objects.requireNonNull(
-                reviewComponent,
-                "reviewComponent must not be null");
-
+                "planningComponent must not be null"
+        );
+        this.evidenceService = Objects.requireNonNull(
+                evidenceService,
+                "evidenceService must not be null"
+        );
         this.synthesisComponent = Objects.requireNonNull(
                 synthesisComponent,
-                "synthesisComponent must not be null");
-
-        this.toolSelectionComponent = Objects.requireNonNull(
-                toolSelectionComponent,
-                "toolSelectionComponent must not be null");
+                "synthesisComponent must not be null"
+        );
+        this.citationsAction = Objects.requireNonNull(
+                citationsAction,
+                "citationsAction must not be null"
+        );
     }
 
-    @Action
-    public MissionIntent interpret(IntentRequest request) {
-        return intentComponent.interpret(request);
-    }
-
-    @Action
-    public TurnDecision decide(TurnInput input) {
+    @Action(description = "Interpret the normalized mission request")
+    public IntentState interpret(
+            MissionRunInput input,
+            OperationContext context
+    ) {
         Objects.requireNonNull(input, "input must not be null");
+        Objects.requireNonNull(context, "context must not be null");
 
-        MissionPlan plan = input.planningRequest().currentPlan();
+        MissionConstraints constraints = input.request().constraints();
 
-        if (plan == null && input.reviewRequest() != null) {
-            plan = input.reviewRequest().plan();
-        }
+        IntentRequest request = new IntentRequest(
+                input.missionId(),
+                input.request().query(),
+                input.preparedArtifacts().preparedArtifacts(),
+                constraints.preferredPath(),
+                setOf(constraints.allowedTools()),
+                setOf(constraints.allowedSourceServices()),
+                listOf(constraints.requiredOutputSections()),
+                constraints.requireCitations(),
+                constraints.requireHumanReview(),
+                constraints.allowExternalSources(),
+                Map.of(
+                        "tenantId", input.tenantId(),
+                        "requestId", input.request().context().requestId()
+                )
+        );
 
-        ReviewDecision reviewDecision = null;
-
-        if (input.reviewRequest() != null) {
-            reviewDecision =
-                    reviewComponent.review(input.reviewRequest());
-
-            if (reviewDecision.type() == DecisionType.COMPLETE) {
-                return TurnDecision.complete(
-                        plan,
-                        reviewDecision.reason());
-            }
-
-            if (reviewDecision.type()
-                    == DecisionType.WAIT_FOR_APPROVAL) {
-                return TurnDecision.waitForApproval(
-                        plan,
-                        reviewDecision.reason());
-            }
-
-            if (reviewDecision.type() == DecisionType.FAIL) {
-                return TurnDecision.fail(
-                        plan,
-                        reviewDecision.reason());
-            }
-        }
-
-        if (plan == null
-                || reviewDecision != null
-                && reviewDecision.type() == DecisionType.REPLAN) {
-
-            plan = planningComponent.plan(input.planningRequest());
-        }
-
-        SelectionRequest selectionRequest =
-                input.selectionRequest().withPlan(plan);
-
-        PlannedStep nextStep =
-                toolSelectionComponent.select(selectionRequest);
-
-        String reason = reviewDecision == null
-                ? "Initial authorized step selected"
-                : reviewDecision.reason();
-
-        return TurnDecision.execute(plan, nextStep, reason);
+        return new IntentState(
+                intentComponent.interpret(request, context)
+        );
     }
 
-    @Action
-    public SynthesisDraft synthesize(SynthesisRequest request) {
-        return synthesisComponent.synthesize(request);
+    @Action(description = "Create a policy-constrained mission plan")
+    public PlanState plan(
+            MissionRunInput input,
+            IntentState intentState,
+            OperationContext context
+    ) {
+        Objects.requireNonNull(input, "input must not be null");
+        Objects.requireNonNull(intentState, "intentState must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+
+        Set<String> allowedCapabilities = effectiveCapabilities(
+                input.request().constraints().allowedTools()
+        );
+
+        PlanningRequest request = new PlanningRequest(
+                input.missionId(),
+                intentState.intent(),
+                null,
+                List.of(),
+                Set.of(),
+                allowedCapabilities,
+                input.request().budget().maxToolCalls(),
+                input.request().budget().maxLlmCalls(),
+                Map.of(
+                        "approvedGateIds", input.approvedGateIds(),
+                        "preparedArtifactCount",
+                        input.preparedArtifacts()
+                                .preparedArtifacts()
+                                .size()
+                )
+        );
+
+        return new PlanState(
+                planningComponent.plan(request, context)
+        );
     }
 
-    public record TurnInput(
-            PlanningRequest planningRequest,
-            ReviewRequest reviewRequest,
-            SelectionRequest selectionRequest) {
+    @Action(description = "Execute authorized document and internal capabilities")
+    public MissionEvidence collectEvidence(
+            MissionRunInput input,
+            IntentState intentState,
+            PlanState planState
+    ) {
+        return evidenceService.collect(
+                input,
+                intentState.intent(),
+                planState.plan()
+        );
+    }
 
-        public TurnInput {
-            planningRequest = Objects.requireNonNull(
-                    planningRequest,
-                    "planningRequest must not be null");
+    @AchievesGoal(description = "Return the grounded SparrowX mission result")
+    @Action(description = "Synthesize citations and the final mission result")
+    public MissionResult complete(
+            MissionRunInput input,
+            IntentState intentState,
+            PlanState planState,
+            MissionEvidence evidence,
+            OperationContext context
+    ) {
+        Objects.requireNonNull(input, "input must not be null");
+        Objects.requireNonNull(evidence, "evidence must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        SynthesisRequest request = new SynthesisRequest(
+                input.missionId(),
+                true,
+                intentState.intent(),
+                planState.plan(),
+                evidence.observations(),
+                evidence.evidenceRefs(),
+                List.of(),
+                intentState.intent().requiredOutputSections(),
+                Map.of(
+                        "query", input.request().query(),
+                        "warnings", evidence.warnings()
+                )
+        );
 
-            selectionRequest = Objects.requireNonNull(
-                    selectionRequest,
-                    "selectionRequest must not be null");
+        SynthesisDraft draft = synthesisComponent.synthesize(request, context);
+        BuildCitationsAction.Result citations = citationsAction.execute(
+                new BuildCitationsAction.BuildSpec(
+                        evidence.evidenceRefs(),
+                        evidence.excerptsByEvidenceId()
+                )
+        );
+
+        Map<String, Object> debug = new LinkedHashMap<>(
+                draft.debugSummary()
+        );
+        debug.put("embabelGraph", List.of(
+                "MissionRunInput",
+                "IntentState",
+                "PlanState",
+                "MissionEvidence",
+                "MissionResult"
+        ));
+        debug.put("warnings", evidence.warnings());
+
+        return new MissionResult(
+                input.missionId(),
+                draft.executiveSummary(),
+                draft.finalAnswer(),
+                draft.sections(),
+                draft.findings(),
+                draft.recommendations(),
+                citations.evidenceRefs(),
+                citations.citations(),
+                request.governanceDecisions(),
+                draft.structuredOutput(),
+                Map.copyOf(debug)
+        );
+    }
+
+    private static Set<String> effectiveCapabilities(
+            List<String> requested
+    ) {
+        Set<String> normalized = setOf(requested);
+        if (normalized.isEmpty()) {
+            return SUPPORTED_CAPABILITIES;
+        }
+
+        Set<String> intersection = normalized.stream()
+                .filter(SUPPORTED_CAPABILITIES::contains)
+                .collect(Collectors.toUnmodifiableSet());
+
+        if (intersection.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "mission allows no supported SparrowX capability"
+            );
+        }
+        return intersection;
+    }
+
+    private static Set<String> setOf(List<String> values) {
+        return values == null ? Set.of() : Set.copyOf(values);
+    }
+
+    private static List<String> listOf(List<String> values) {
+        return values == null ? List.of() : List.copyOf(values);
+    }
+
+    public record IntentState(MissionIntent intent) {
+        public IntentState {
+            intent = Objects.requireNonNull(
+                    intent,
+                    "intent must not be null"
+            );
         }
     }
 
-    public record TurnDecision(
-            TurnDecisionType type,
-            MissionPlan plan,
-            PlannedStep nextStep,
-            String reason) {
-
-        public TurnDecision {
-            type = Objects.requireNonNull(
-                    type,
-                    "type must not be null");
-
-            reason = reason == null ? "" : reason;
-
-            if (type == TurnDecisionType.EXECUTE_STEP
-                    && nextStep == null) {
-                throw new IllegalArgumentException(
-                        "nextStep is required for EXECUTE_STEP");
-            }
-        }
-
-        public static TurnDecision execute(
-                MissionPlan plan,
-                PlannedStep nextStep,
-                String reason) {
-
-            return new TurnDecision(
-                    TurnDecisionType.EXECUTE_STEP,
-                    Objects.requireNonNull(
-                            plan,
-                            "plan must not be null"),
-                    Objects.requireNonNull(
-                            nextStep,
-                            "nextStep must not be null"),
-                    reason);
-        }
-
-        public static TurnDecision complete(
-                MissionPlan plan,
-                String reason) {
-
-            return new TurnDecision(
-                    TurnDecisionType.COMPLETE,
+    public record PlanState(MissionPlan plan) {
+        public PlanState {
+            plan = Objects.requireNonNull(
                     plan,
-                    null,
-                    reason);
+                    "plan must not be null"
+            );
         }
-
-        public static TurnDecision waitForApproval(
-                MissionPlan plan,
-                String reason) {
-
-            return new TurnDecision(
-                    TurnDecisionType.WAIT_FOR_APPROVAL,
-                    plan,
-                    null,
-                    reason);
-        }
-
-        public static TurnDecision fail(
-                MissionPlan plan,
-                String reason) {
-
-            return new TurnDecision(
-                    TurnDecisionType.FAIL,
-                    plan,
-                    null,
-                    reason);
-        }
-    }
-
-    public enum TurnDecisionType {
-        EXECUTE_STEP,
-        COMPLETE,
-        WAIT_FOR_APPROVAL,
-        FAIL
     }
 }

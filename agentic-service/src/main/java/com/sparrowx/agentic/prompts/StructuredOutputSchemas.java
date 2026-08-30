@@ -1,6 +1,8 @@
 package com.sparrowx.agentic.prompts;
 
+import com.sparrowx.agentic.mission.model.MissionPath;
 import com.sparrowx.agentic.planning.StepKind;
+import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -8,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
 
 public final class StructuredOutputSchemas {
 
@@ -123,14 +126,14 @@ public final class StructuredOutputSchemas {
 
     private static Map<String, Object> missionIntentSchema() {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("missionId", stringSchema());
         properties.put("objective", stringSchema());
         properties.put(
                 "selectedPath",
-                enumSchema(List.of(
-                        "FAST",
-                        "RESEARCH",
-                        "GOVERNED")));
+                enumSchema(
+                        Arrays.stream(MissionPath.values())
+                                .map(Enum::name)
+                                .toList()
+                ));
         properties.put(
                 "targetEntities",
                 arraySchema(stringSchema()));
@@ -169,7 +172,6 @@ public final class StructuredOutputSchemas {
         return objectSchema(
                 properties,
                 List.of(
-                        "missionId",
                         "objective",
                         "selectedPath",
                         "requiresDocumentEvidence",
@@ -204,7 +206,6 @@ public final class StructuredOutputSchemas {
 
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("planId", stringSchema());
-        properties.put("missionId", stringSchema());
         properties.put(
                 "revision",
                 Map.of(
@@ -227,7 +228,6 @@ public final class StructuredOutputSchemas {
                 properties,
                 List.of(
                         "planId",
-                        "missionId",
                         "revision",
                         "steps"));
     }

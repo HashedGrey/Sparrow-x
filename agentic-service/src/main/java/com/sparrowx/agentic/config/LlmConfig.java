@@ -4,10 +4,8 @@ import com.sparrowx.agentic.adapters.llm.LlmFallbackPolicy.ModelRoute;
 import com.sparrowx.agentic.adapters.llm.StructuredLlmClient;
 import com.sparrowx.agentic.adapters.llm.StructuredLlmClient.Request;
 import com.sparrowx.agentic.adapters.llm.StructuredLlmResponse;
-import com.sparrowx.agentic.components.IntentComponent;
-import com.sparrowx.agentic.components.PlanningComponent;
 import com.sparrowx.agentic.components.ReviewComponent;
-import com.sparrowx.agentic.components.SynthesisComponent;
+import lombok.Getter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -49,25 +47,6 @@ public final class LlmConfig {
         return new StructuredLlmClient(backend);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(IntentComponent.Interpreter.class)
-    public IntentComponent.Interpreter missingIntentInterpreter() {
-        return request -> {
-            throw missingReasoner(
-                    "IntentComponent.Interpreter"
-            );
-        };
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(PlanningComponent.Planner.class)
-    public PlanningComponent.Planner missingMissionPlanner() {
-        return request -> {
-            throw missingReasoner(
-                    "PlanningComponent.Planner"
-            );
-        };
-    }
 
     @Bean
     @ConditionalOnMissingBean(ReviewComponent.Reviewer.class)
@@ -79,15 +58,6 @@ public final class LlmConfig {
         };
     }
 
-    @Bean
-    @ConditionalOnMissingBean(SynthesisComponent.Synthesizer.class)
-    public SynthesisComponent.Synthesizer missingMissionSynthesizer() {
-        return request -> {
-            throw missingReasoner(
-                    "SynthesisComponent.Synthesizer"
-            );
-        };
-    }
 
     private static StructuredLlmResponse invokeProvider(
             Map<String, StructuredLlmProvider> providers,
@@ -137,6 +107,7 @@ public final class LlmConfig {
         );
     }
 
+    @Getter
     @ConfigurationProperties(
             prefix = "sparrowx.agentic.llm"
     )
@@ -170,19 +141,11 @@ public final class LlmConfig {
             return provider.trim();
         }
 
-        public String getDefaultProvider() {
-            return defaultProvider;
-        }
-
         public void setDefaultProvider(String defaultProvider) {
             this.defaultProvider =
                     defaultProvider == null
                             ? ""
                             : defaultProvider.trim();
-        }
-
-        public Map<String, String> getRouteProviders() {
-            return routeProviders;
         }
 
         public void setRouteProviders(

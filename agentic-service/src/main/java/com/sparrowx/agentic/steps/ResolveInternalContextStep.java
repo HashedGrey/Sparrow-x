@@ -4,18 +4,24 @@ import com.sparrowx.agentic.actions.internal.ReadInternalCompanyGraphAction;
 import com.sparrowx.agentic.actions.internal.ReadLearningGraphAction;
 import com.sparrowx.agentic.actions.internal.SearchInternalEntitiesAction;
 import com.sparrowx.agentic.mission.evidence.EvidenceRef;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.internal.InternalEntitySearchRequestBuilder.SearchSpec;
 import com.sparrowx.agentic.tools.internal.InternalGraphRequestBuilder.GraphSpec;
 import com.sparrowx.agentic.validation.DownstreamResponseValidator;
 import com.sparrowx.agentic.validation.DownstreamResponseValidator.ResponseMetadata;
+import com.sparrowx.internal.grpc.InternalGraphNodeType;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 @Component
 public final class ResolveInternalContextStep {
+
+    private static final int DEFAULT_GRAPH_DEPTH = 1;
+    private static final int DEFAULT_GRAPH_LIMIT = 50;
 
     private final SearchInternalEntitiesAction searchAction;
     private final ReadInternalCompanyGraphAction companyGraphAction;
@@ -54,11 +60,24 @@ public final class ResolveInternalContextStep {
         Objects.requireNonNull(request, "request must not be null");
 
         return switch (request.operation()) {
-            case SEARCH_ENTITIES -> search(context, request.searchSpec());
+
+            case SEARCH_ENTITIES ->
+                    search(
+                            context,
+                            requireSearchSpec(request.searchSpec())
+                    );
+
             case READ_COMPANY_GRAPH ->
-                    readCompanyGraph(context, request.graphSpec());
+                    readCompanyGraph(
+                            context,
+                            toGraphSpec(request.graphSpec())
+                    );
+
             case READ_LEARNING_GRAPH ->
-                    readLearningGraph(context, request.graphSpec());
+                    readLearningGraph(
+                            context,
+                            toGraphSpec(request.graphSpec())
+                    );
         };
     }
 
@@ -86,6 +105,24 @@ public final class ResolveInternalContextStep {
                 )
         );
 
+        Map<String, Object> attributes = new LinkedHashMap<>();
+
+        attributes.put("candidateCount", result.candidates().size());
+        attributes.put("ambiguous", result.ambiguous());
+
+        if (!result.ambiguous()
+                && !result.candidates().isEmpty()) {
+
+            var resolved = result.candidates().getFirst();
+
+            if (!resolved.getEntityId().isBlank()) {
+                attributes.put("resolvedEntityId", resolved.getEntityId());
+                attributes.put("resolvedNodeType", resolved.getNodeType().name());
+                attributes.put("resolvedLabel", resolved.getLabel());
+                attributes.put("resolvedScore", resolved.getScore());
+            }
+        }
+
         return new Result(
                 Operation.SEARCH_ENTITIES,
                 result.evidenceRefs(),
@@ -93,11 +130,9 @@ public final class ResolveInternalContextStep {
                         + result.candidates().size()
                         + " internal entity candidates",
                 result.warnings(),
-                Map.of(
-                        "candidateCount", result.candidates().size(),
-                        "ambiguous", result.ambiguous()
-                )
+                Map.copyOf(attributes)
         );
+
     }
 
     private Result readCompanyGraph(
@@ -166,10 +201,17 @@ public final class ResolveInternalContextStep {
         );
     }
 
+    /**
+     * Planner/Jackson-facing request.
+     *
+     * GraphInput is intentionally loose. It prevents Jackson from trying to
+     * instantiate the strict GraphSpec when the selected operation is only
+     * SEARCH_ENTITIES.
+     */
     public record Request(
             Operation operation,
             SearchSpec searchSpec,
-            GraphSpec graphSpec
+            GraphInput graphSpec
     ) {
         public Request {
             operation = Objects.requireNonNull(
@@ -177,28 +219,39 @@ public final class ResolveInternalContextStep {
                     "operation must not be null"
             );
 
-            if (operation == Operation.SEARCH_ENTITIES) {
-                Objects.requireNonNull(
-                        searchSpec,
+            if (operation == Operation.SEARCH_ENTITIES
+                    && searchSpec == null) {
+                throw new IllegalArgumentException(
                         "searchSpec is required for SEARCH_ENTITIES"
                 );
-                if (graphSpec != null) {
-                    throw new IllegalArgumentException(
-                            "graphSpec is not allowed for SEARCH_ENTITIES"
-                    );
-                }
-            } else {
-                Objects.requireNonNull(
-                        graphSpec,
+            }
+
+            if ((operation == Operation.READ_COMPANY_GRAPH
+                    || operation == Operation.READ_LEARNING_GRAPH)
+                    && graphSpec == null) {
+                throw new IllegalArgumentException(
                         "graphSpec is required for graph operations"
                 );
-                if (searchSpec != null) {
-                    throw new IllegalArgumentException(
-                            "searchSpec is not allowed for graph operations"
-                    );
-                }
             }
         }
+    }
+
+    /**
+     * Loose structured-output representation.
+     *
+     * Do not perform strict domain validation here. The LLM may populate
+     * irrelevant structured-output branches with null/blank values.
+     *
+     * Strict GraphSpec is constructed only when a graph operation is actually
+     * selected.
+     */
+    public record GraphInput(
+            String requestId,
+            String rootEntityId,
+            InternalGraphNodeType rootNodeType,
+            Integer depth,
+            Integer limit
+    ) {
     }
 
     public record Result(
@@ -213,13 +266,19 @@ public final class ResolveInternalContextStep {
                     operation,
                     "operation must not be null"
             );
+
             evidenceRefs = evidenceRefs == null
                     ? List.of()
                     : List.copyOf(evidenceRefs);
-            summary = summary == null ? "" : summary;
+
+            summary = summary == null
+                    ? ""
+                    : summary;
+
             warnings = warnings == null
                     ? List.of()
                     : List.copyOf(warnings);
+
             attributes = attributes == null
                     ? Map.of()
                     : Map.copyOf(attributes);
@@ -230,5 +289,40 @@ public final class ResolveInternalContextStep {
         SEARCH_ENTITIES,
         READ_COMPANY_GRAPH,
         READ_LEARNING_GRAPH
+    }
+
+    private static SearchSpec requireSearchSpec(
+            SearchSpec spec
+    ) {
+        return Objects.requireNonNull(
+                spec,
+                "searchSpec is required for SEARCH_ENTITIES"
+        );
+    }
+
+    /**
+     * Converts loose LLM/Jackson input into the strict downstream domain type.
+     *
+     * This method is reached only for an actual graph operation.
+     */
+    private static GraphSpec toGraphSpec(
+            GraphInput input
+    ) {
+        Objects.requireNonNull(
+                input,
+                "graphSpec is required for graph operations"
+        );
+
+        return new GraphSpec(
+                input.requestId(),
+                input.rootEntityId(),
+                input.rootNodeType(),
+                input.depth() == null
+                        ? DEFAULT_GRAPH_DEPTH
+                        : input.depth(),
+                input.limit() == null
+                        ? DEFAULT_GRAPH_LIMIT
+                        : input.limit()
+        );
     }
 }
