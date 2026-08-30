@@ -14,9 +14,6 @@ import org.springframework.context.annotation.Configuration;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Registers MissionWorkflow and MissionActivities on the configured task queue.
- */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(
         prefix = "sparrowx.agentic.temporal",
@@ -41,20 +38,16 @@ public final class TemporalWorkerConfig {
     ) {
         WorkerOptions options = WorkerOptions.newBuilder()
                 .setMaxConcurrentWorkflowTaskExecutionSize(
-                        properties
-                                .maxConcurrentWorkflowTaskExecutions()
+                        properties.maxConcurrentWorkflowTaskExecutions()
                 )
                 .setMaxConcurrentActivityExecutionSize(
-                        properties
-                                .maxConcurrentActivityExecutions()
+                        properties.maxConcurrentActivityExecutions()
                 )
                 .setMaxConcurrentWorkflowTaskPollers(
-                        properties
-                                .maxConcurrentWorkflowTaskPollers()
+                        properties.maxConcurrentWorkflowTaskPollers()
                 )
                 .setMaxConcurrentActivityTaskPollers(
-                        properties
-                                .maxConcurrentActivityTaskPollers()
+                        properties.maxConcurrentActivityTaskPollers()
                 )
                 .build();
 
@@ -62,15 +55,10 @@ public final class TemporalWorkerConfig {
                 properties.taskQueue(),
                 options
         );
-
         worker.registerWorkflowImplementationTypes(
                 MissionWorkflowImpl.class
         );
-
-        worker.registerActivitiesImplementations(
-                missionActivities
-        );
-
+        worker.registerActivitiesImplementations(missionActivities);
         return worker;
     }
 
@@ -83,7 +71,6 @@ public final class TemporalWorkerConfig {
                 missionTemporalWorker,
                 "missionTemporalWorker must not be null"
         );
-
         return new WorkerFactoryLifecycle(workerFactory);
     }
 
@@ -91,12 +78,9 @@ public final class TemporalWorkerConfig {
             implements SmartLifecycle {
 
         private final WorkerFactory workerFactory;
-        private final AtomicBoolean running =
-                new AtomicBoolean(false);
+        private final AtomicBoolean running = new AtomicBoolean(false);
 
-        private WorkerFactoryLifecycle(
-                WorkerFactory workerFactory
-        ) {
+        private WorkerFactoryLifecycle(WorkerFactory workerFactory) {
             this.workerFactory = Objects.requireNonNull(
                     workerFactory,
                     "workerFactory must not be null"

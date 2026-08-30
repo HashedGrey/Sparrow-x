@@ -7,9 +7,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.TreeSet;
 
-/**
- * Stable, tenant-scoped payload for a synchronous Temporal Workflow Update.
- */
+/** Stable payload for approve, reject and cancel Workflow Updates. */
 public record MissionWorkflowCommand(
         String updateId,
         CommandType type,
@@ -20,46 +18,18 @@ public record MissionWorkflowCommand(
         Set<String> actorRoles,
         String reason
 ) {
-
-    private static final int MAX_ID_LENGTH = 256;
-    private static final int MAX_REASON_LENGTH = 4_000;
-
     public MissionWorkflowCommand {
-        updateId = requireText(
-                updateId,
-                "updateId",
-                MAX_ID_LENGTH
-        );
+        updateId = requireText(updateId, "updateId");
         type = java.util.Objects.requireNonNull(
                 type,
                 "type must not be null"
         );
-        tenantId = requireText(
-                tenantId,
-                "tenantId",
-                MAX_ID_LENGTH
-        );
-        missionId = requireText(
-                missionId,
-                "missionId",
-                MAX_ID_LENGTH
-        );
-        actorUserId = requireText(
-                actorUserId,
-                "actorUserId",
-                MAX_ID_LENGTH
-        );
+        tenantId = requireText(tenantId, "tenantId");
+        missionId = requireText(missionId, "missionId");
+        actorUserId = requireText(actorUserId, "actorUserId");
         gateId = normalize(gateId);
         reason = normalize(reason);
         actorRoles = immutableRoles(actorRoles);
-
-        if (reason.length() > MAX_REASON_LENGTH) {
-            throw new IllegalArgumentException(
-                    "reason must not exceed "
-                            + MAX_REASON_LENGTH
-                            + " characters"
-            );
-        }
 
         if (type == CommandType.CANCEL) {
             if (!gateId.isEmpty()) {
@@ -67,22 +37,11 @@ public record MissionWorkflowCommand(
                         "cancel must not contain gateId"
                 );
             }
-            if (reason.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "cancel reason must not be blank"
-                );
-            }
+            reason = requireText(reason, "reason");
         } else {
-            gateId = requireText(
-                    gateId,
-                    "gateId",
-                    MAX_ID_LENGTH
-            );
-            if (type == CommandType.REJECT
-                    && reason.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "reject reason must not be blank"
-                );
+            gateId = requireText(gateId, "gateId");
+            if (type == CommandType.REJECT) {
+                reason = requireText(reason, "reason");
             }
         }
     }
@@ -148,9 +107,6 @@ public record MissionWorkflowCommand(
         );
     }
 
-    /**
-     * Canonical content fingerprint used to detect conflicting Update-ID reuse.
-     */
     public String fingerprint() {
         String canonical = String.join(
                 "\u001f",
@@ -162,26 +118,12 @@ public record MissionWorkflowCommand(
                 String.join("\u001e", actorRoles),
                 reason
         );
-
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(
-                            canonical.getBytes(
-                                    StandardCharsets.UTF_8
-                            )
-                    );
-
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder(64);
             for (byte value : digest) {
-                result.append(
-                        Character.forDigit(
-                                (value >>> 4) & 0x0f,
-                                16
-                        )
-                );
-                result.append(
-                        Character.forDigit(value & 0x0f, 16)
-                );
+                result.append(String.format("%02x", value & 0xff));
             }
             return result.toString();
         } catch (NoSuchAlgorithmException exception) {
@@ -192,42 +134,22 @@ public record MissionWorkflowCommand(
         }
     }
 
-    private static Set<String> immutableRoles(
-            Set<String> values
-    ) {
-        TreeSet<String> normalized = new TreeSet<>();
-
+    private static Set<String> immutableRoles(Set<String> values) {
+        TreeSet<String> roles = new TreeSet<>();
         if (values != null) {
-            for (String value : values) {
-                String role = normalize(value);
-                if (!role.isEmpty()) {
-                    if (role.length() > MAX_ID_LENGTH) {
-                        throw new IllegalArgumentException(
-                                "actor role is too long"
-                        );
-                    }
-                    normalized.add(role);
-                }
-            }
+            values.stream()
+                    .map(MissionWorkflowCommand::normalize)
+                    .filter(value -> !value.isEmpty())
+                    .forEach(roles::add);
         }
-
-        return Collections.unmodifiableSet(normalized);
+        return Collections.unmodifiableSet(roles);
     }
 
-    private static String requireText(
-            String value,
-            String field,
-            int maximumLength
-    ) {
+    private static String requireText(String value, String field) {
         String normalized = normalize(value);
         if (normalized.isEmpty()) {
             throw new IllegalArgumentException(
                     field + " must not be blank"
-            );
-        }
-        if (normalized.length() > maximumLength) {
-            throw new IllegalArgumentException(
-                    field + " is too long"
             );
         }
         return normalized;

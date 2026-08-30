@@ -24,19 +24,13 @@ public interface MissionWorkflow {
     );
 
     @UpdateMethod(name = APPROVE_UPDATE)
-    MissionWorkflowState approve(
-            MissionWorkflowCommand command
-    );
+    MissionWorkflowState approve(MissionWorkflowCommand command);
 
     @UpdateMethod(name = REJECT_UPDATE)
-    MissionWorkflowState reject(
-            MissionWorkflowCommand command
-    );
+    MissionWorkflowState reject(MissionWorkflowCommand command);
 
     @UpdateMethod(name = CANCEL_UPDATE)
-    MissionWorkflowState cancel(
-            MissionWorkflowCommand command
-    );
+    MissionWorkflowState cancel(MissionWorkflowCommand command);
 
     @QueryMethod(name = STATE_QUERY)
     MissionWorkflowState state();
