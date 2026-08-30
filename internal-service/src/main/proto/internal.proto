@@ -98,6 +98,13 @@ service InternalService {
       returns (GetPermissionResponse);
 
   // ========================
+  // Internal Entity Search
+  // ========================
+
+  rpc SearchInternalEntities(SearchInternalEntitiesRequest)
+      returns (SearchInternalEntitiesResponse);
+
+  // ========================
   // Read-Only Graph Context
   // ========================
 
@@ -587,6 +594,41 @@ message Permission {
   google.protobuf.Timestamp updated_at = 6;
 }
 
+// ========================
+// Internal Entity Search
+// ========================
+
+message SearchInternalEntitiesRequest {
+  RequestContext context = 1;
+  string query = 2;
+  repeated InternalGraphNodeType allowed_node_types = 3;
+  string root_entity_id = 4;
+  InternalGraphNodeType root_node_type = 5;
+  int32 depth = 6;
+  int32 limit = 7;
+  bool include_fuzzy_matches = 8;
+  map<string, string> filters = 9;
+}
+
+message SearchInternalEntitiesResponse {
+  repeated InternalEntitySearchResult results = 1;
+  bool ambiguous = 2;
+  repeated string warnings = 3;
+}
+
+message InternalEntitySearchResult {
+  string entity_id = 1;
+  InternalGraphNodeType node_type = 2;
+  string label = 3;
+  string slug = 4;
+  string summary = 5;
+  double score = 6;
+  string match_reason = 7;
+  string parent_entity_id = 8;
+  InternalGraphNodeType parent_node_type = 9;
+
+  map<string, string> attributes = 10;
+}
 // ========================
 // Graph Reads
 // ========================

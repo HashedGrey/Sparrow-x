@@ -13,11 +13,11 @@ spring:
     producer:
       acks: all
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
+#  security:
+#    oauth2:
+#      resourceserver:
+#        jwt:
+#          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
 
 otel:
   exporter:
