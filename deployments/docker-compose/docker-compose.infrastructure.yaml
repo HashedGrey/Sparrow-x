@@ -37,6 +37,62 @@ services:
     networks:
       - infrastructure
 
+  #######################################################
+  # Temporal - durable workflow engine
+  #######################################################
+  temporal:
+    image: temporalio/auto-setup:1.29.1
+    container_name: temporal
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
+      POSTGRES_SEEDS: postgres
+
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+
+      BIND_ON_IP: 0.0.0.0
+
+    ports:
+      - "7233:7233"
+
+    networks:
+      - infrastructure
+
+
+  #######################################################
+  # Temporal UI
+  #######################################################
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    container_name: temporal-ui
+    restart: unless-stopped
+
+    depends_on:
+      temporal:
+        condition: service_started
+
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+
+    ports:
+      - "8233:8080"
+
+    networks:
+      - infrastructure
 
 
 
@@ -52,6 +108,8 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+      - TZ=UTC
+      - PGTZ=UTC
     command:
       - "postgres"
       - "-c"
@@ -141,6 +199,10 @@ services:
     image: redis
     container_name: redis
     restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory-policy
+      - noeviction
     ports:
       - 6379:6379
     networks:
@@ -158,9 +220,12 @@ services:
       - /etc/alloy/config.alloy
       - --server.http.listen-addr=0.0.0.0:12345
 
+
+    env_file:
+      - ../../.env
     volumes:
-      - ./../configs/alloy.hcl:/etc/alloy/config.alloy
-      - ./../../tweet-service/logs:/var/log/services
+      - ../configs/alloy.hcl:/etc/alloy/config.alloy:ro
+      - ./../../agentic-service/logs:/var/log/services
 
     ports:
       - "4317:4317"   # OTLP gRPC receiver
