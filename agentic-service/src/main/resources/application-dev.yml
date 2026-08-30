@@ -4,24 +4,21 @@ spring:
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
-
-  flyway:
-    schemas: agentic
-    default-schema: agentic
-    create-schemas: true
-    clean-disabled: false
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
+#  flyway:
+#    schemas: agentic
+#    default-schema: agentic
+#    create-schemas: true
+#    clean-disabled: false
+#  security:
+#    oauth2:
+#      resourceserver:
+#        jwt:
+#          jwk-set-uri: http://localhost:8085/realms/keycloak-realm/protocol/openid-connect/certs
 
 otel:
   exporter:
     otlp:
       endpoint: http://localhost:4317
-
   resource:
     attributes:
       service.name: agentic-service
@@ -29,46 +26,4 @@ otel:
       service.namespace: sparrowx
       deployment.environment: dev
 
-sparrowx:
-  agentic:
-    temporal:
-      endpoint: ${TEMPORAL_ENDPOINT:localhost:7233}
-      namespace: ${TEMPORAL_NAMESPACE:default}
-      task-queue: ${TEMPORAL_TASK_QUEUE:agentic-mission-task-queue}
 
-      worker:
-        max-concurrent-workflow-tasks: 100
-        max-concurrent-activities: 50
-
-    downstream:
-      internal:
-        host: ${INTERNAL_GRPC_HOST:localhost}
-        port: ${INTERNAL_GRPC_PORT:50055}
-        plaintext: ${INTERNAL_GRPC_PLAINTEXT:true}
-        max-inbound-message-bytes: 16777216
-
-      document:
-        host: ${DOCUMENT_GRPC_HOST:localhost}
-        port: ${DOCUMENT_GRPC_PORT:50054}
-        plaintext: ${DOCUMENT_GRPC_PLAINTEXT:true}
-        max-inbound-message-bytes: 16777216
-
-    llm:
-      provider: ${LLM_PROVIDER:openai}
-      model: ${LLM_MODEL}
-      api-key: ${LLM_API_KEY}
-      timeout: 60s
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus
-
-  endpoint:
-    prometheus:
-      access: unrestricted
-
-  metrics:
-    tags:
-      service: agentic-service
