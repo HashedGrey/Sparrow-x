@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.tools.internal;
 
 import com.sparrowx.agentic.adapters.internal.InternalGrpcClient;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.internal.grpc.ReadInternalCompanyGraphRequest;
 import com.sparrowx.internal.grpc.ReadInternalCompanyGraphResponse;
 import com.sparrowx.internal.grpc.ReadLearningGraphRequest;

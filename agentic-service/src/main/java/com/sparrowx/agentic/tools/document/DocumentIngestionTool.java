@@ -2,6 +2,7 @@ package com.sparrowx.agentic.tools.document;
 
 import com.sparrowx.agentic.adapters.document.DocumentClientMapper;
 import com.sparrowx.agentic.adapters.document.DocumentGrpcClient;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.document.proto.GetIngestionJobRequest;
 import com.sparrowx.document.proto.GetIngestionJobResponse;
 import com.sparrowx.document.proto.IngestionStatusProto;

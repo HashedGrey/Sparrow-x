@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.tools.document;
 
 import com.sparrowx.agentic.adapters.document.DocumentGrpcClient;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.document.proto.BuildDocumentEvidenceRequest;
 import com.sparrowx.document.proto.BuildDocumentEvidenceResponse;
 import com.sparrowx.document.proto.GetDocumentRequest;

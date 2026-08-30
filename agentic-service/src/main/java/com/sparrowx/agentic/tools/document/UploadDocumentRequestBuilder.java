@@ -3,6 +3,7 @@ package com.sparrowx.agentic.tools.document;
 import com.google.protobuf.ByteString;
 import com.sparrowx.agentic.adapters.document.DocumentClientMapper;
 import com.sparrowx.agentic.mission.artifact.PreparedArtifact;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.document.proto.UploadDocumentRequest;
 
 import java.util.LinkedHashMap;

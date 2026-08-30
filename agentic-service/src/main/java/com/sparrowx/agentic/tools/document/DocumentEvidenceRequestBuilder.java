@@ -1,6 +1,7 @@
 package com.sparrowx.agentic.tools.document;
 
 import com.sparrowx.agentic.adapters.document.DocumentClientMapper;
+import com.sparrowx.agentic.mission.model.MissionContext;
 import com.sparrowx.agentic.tools.document.DocumentSpanSearchRequestBuilder.Scope;
 import com.sparrowx.document.proto.BuildDocumentEvidenceRequest;
 import com.sparrowx.document.proto.EvidenceBuildContextProto;
