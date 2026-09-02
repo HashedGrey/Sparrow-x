@@ -40,6 +40,10 @@ public class CommandBusImpl implements CommandBus {
         CommandExecutionChain<R> chain =
                 buildInterceptorChain(handler);
 
+        if (command instanceof NonTransactionalCommand<?>) {
+            return chain.proceed(command);
+        }
+
         // Transaction boundary
         return unitOfWork.execute(() -> chain.proceed(command));
     }
