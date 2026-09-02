@@ -33,12 +33,10 @@ spring:
     show-sql: false
     open-in-view: false
 
-server:
-  port: 8081
 
-grpc:
-  server:
-    port: 50054
+  grpc:
+    server:
+      port: 50054
 
 sparrowx:
   document:

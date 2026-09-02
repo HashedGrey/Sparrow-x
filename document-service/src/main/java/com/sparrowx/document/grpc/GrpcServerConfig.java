@@ -1,71 +1,82 @@
 package com.sparrowx.document.grpc;
 
-import buildingblocks.infrastructure.grpc.interceptors.*;
-import com.sparrowx.document.grpc.interceptors.GrpcPolicyEnforcementInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcAuthInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcExceptionInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcLoggingInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcMetricsInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcRequestContextMdcInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcResilienceInterceptor;
+import buildingblocks.infrastructure.grpc.interceptors.GrpcTracingInterceptor;
 import com.sparrowx.document.grpc.policies.DocumentResiliencePolicy;
-import net.devh.boot.grpc.server.serverfactory.GrpcServerConfigurer;
+import io.opentelemetry.api.trace.Tracer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.grpc.server.GlobalServerInterceptor;
 
-@Configuration
-public class GrpcServerConfig {
+@Configuration(proxyBeanMethods = false)
+public final class GrpcServerConfig {
 
-    private final GrpcExceptionInterceptor grpcExceptionInterceptor;
-    //private final GrpcAuthInterceptor grpcAuthInterceptor;
-    //private final GrpcPolicyEnforcementInterceptor grpcPolicyEnforcementInterceptor;
-    private final GrpcTracingInterceptor grpcTracingInterceptor;
-    private final GrpcMetricsInterceptor grpcMetricsInterceptor;
-    private final GrpcLoggingInterceptor grpcLoggingInterceptor;
-    private final GrpcRequestContextMdcInterceptor grpcRequestContextMdcInterceptor;
-
-    public GrpcServerConfig(
-            GrpcExceptionInterceptor grpcExceptionInterceptor,
-            //GrpcAuthInterceptor grpcAuthInterceptor,
-            //GrpcPolicyEnforcementInterceptor grpcPolicyEnforcementInterceptor,
-            GrpcTracingInterceptor grpcTracingInterceptor,
-            GrpcMetricsInterceptor grpcMetricsInterceptor,
-            GrpcLoggingInterceptor grpcLoggingInterceptor,
-            GrpcRequestContextMdcInterceptor grpcRequestContextMdcInterceptor
+    @Bean
+    @Order(100)
+    @GlobalServerInterceptor
+    public GrpcTracingInterceptor grpcTracingInterceptor(
+            Tracer tracer
     ) {
-        this.grpcExceptionInterceptor = grpcExceptionInterceptor;
-        //this.grpcAuthInterceptor = grpcAuthInterceptor;
-        //this.grpcPolicyEnforcementInterceptor = grpcPolicyEnforcementInterceptor;
-        this.grpcTracingInterceptor = grpcTracingInterceptor;
-        this.grpcMetricsInterceptor = grpcMetricsInterceptor;
-        this.grpcLoggingInterceptor = grpcLoggingInterceptor;
-        this.grpcRequestContextMdcInterceptor = grpcRequestContextMdcInterceptor;
+        return new GrpcTracingInterceptor(tracer);
     }
 
     @Bean
-    public GrpcResilienceInterceptor.ResiliencePolicyResolver documentResiliencePolicyResolver(
-            DocumentResiliencePolicy policy
-    ) {
+    @Order(200)
+    @GlobalServerInterceptor
+    public GrpcExceptionInterceptor grpcExceptionInterceptor() {
+        return new GrpcExceptionInterceptor();
+    }
+
+    @Bean
+    @Order(300)
+    @GlobalServerInterceptor
+    public GrpcRequestContextMdcInterceptor grpcRequestContextMdcInterceptor() {
+        return new GrpcRequestContextMdcInterceptor();
+    }
+
+    @Bean
+    @Order(400)
+    @GlobalServerInterceptor
+    public GrpcLoggingInterceptor grpcLoggingInterceptor() {
+        return new GrpcLoggingInterceptor();
+    }
+
+    @Bean
+    @Order(500)
+    @GlobalServerInterceptor
+    public GrpcMetricsInterceptor grpcMetricsInterceptor() {
+        return new GrpcMetricsInterceptor();
+    }
+
+    @Bean
+    @Order(600)
+    @GlobalServerInterceptor
+    public GrpcAuthInterceptor grpcAuthInterceptor() {
+        return new GrpcAuthInterceptor();
+    }
+
+//    @Bean
+//    @Order(700)
+//    @GlobalServerInterceptor
+//    public GrpcPolicyEnforcementInterceptor grpcPolicyEnforcementInterceptor() {
+//        return new GrpcPolicyEnforcementInterceptor();
+//    }
+
+    @Bean
+    public GrpcResilienceInterceptor.ResiliencePolicyResolver documentResiliencePolicyResolver(DocumentResiliencePolicy policy) {
         return fullMethodName -> policy;
     }
 
     @Bean
-    public GrpcResilienceInterceptor grpcResilienceInterceptor(
-            GrpcResilienceInterceptor.ResiliencePolicyResolver resolver
-    ) {
+    @Order(800)
+    @GlobalServerInterceptor
+    public GrpcResilienceInterceptor grpcResilienceInterceptor(GrpcResilienceInterceptor.ResiliencePolicyResolver resolver) {
         return new GrpcResilienceInterceptor(resolver);
-    }
-
-    @Bean
-    public GrpcServerConfigurer grpcServerConfigurer(
-            GrpcResilienceInterceptor grpcResilienceInterceptor
-    ) {
-        return serverBuilder -> {
-            serverBuilder.intercept(grpcExceptionInterceptor);
-            //serverBuilder.intercept(grpcAuthInterceptor);
-            //serverBuilder.intercept(grpcPolicyEnforcementInterceptor);
-
-            serverBuilder.intercept(grpcTracingInterceptor);
-            serverBuilder.intercept(grpcRequestContextMdcInterceptor);
-
-            serverBuilder.intercept(grpcMetricsInterceptor);
-            serverBuilder.intercept(grpcLoggingInterceptor);
-
-            serverBuilder.intercept(grpcResilienceInterceptor);
-        };
     }
 }

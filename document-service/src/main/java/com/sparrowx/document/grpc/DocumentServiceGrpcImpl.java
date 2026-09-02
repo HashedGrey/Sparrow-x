@@ -30,8 +30,8 @@ import com.sparrowx.document.proto.UploadDocumentResponse;
 import com.sparrowx.document.proto.VerifyEvidenceGraphRequest;
 import com.sparrowx.document.proto.VerifyEvidenceGraphResponse;
 import io.grpc.stub.StreamObserver;
-import net.devh.boot.grpc.server.service.GrpcService;
 import org.slf4j.MDC;
+import org.springframework.grpc.server.service.GrpcService;
 
 @GrpcService
 public class DocumentServiceGrpcImpl extends DocumentServiceGrpc.DocumentServiceImplBase {
