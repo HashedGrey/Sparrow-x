@@ -7,6 +7,7 @@ import com.sparrowx.document.domain.valueobjects.DocumentId;
 import com.sparrowx.document.exceptions.InvalidDocumentException;
 import com.sparrowx.document.exceptions.RetrievalFailedException;
 import com.sparrowx.document.observability.RetrievalLifecycleLogger;
+import com.sparrowx.document.retrieval.DocumentScopeResolver;
 import com.sparrowx.document.retrieval.HybridDocumentRetriever;
 import com.sparrowx.document.retrieval.SourceSpanBuilder;
 import org.springframework.stereotype.Component;
@@ -24,15 +25,18 @@ public class SearchDocumentSpansQueryHandler
     private final HybridDocumentRetriever hybridDocumentRetriever;
     private final SourceSpanBuilder sourceSpanBuilder;
     private final RetrievalLifecycleLogger retrievalLifecycleLogger;
+    private final DocumentScopeResolver documentScopeResolver;
 
     public SearchDocumentSpansQueryHandler(
             HybridDocumentRetriever hybridDocumentRetriever,
             SourceSpanBuilder sourceSpanBuilder,
-            RetrievalLifecycleLogger retrievalLifecycleLogger
+            RetrievalLifecycleLogger retrievalLifecycleLogger,
+            DocumentScopeResolver documentScopeResolver
     ) {
         this.hybridDocumentRetriever = hybridDocumentRetriever;
         this.sourceSpanBuilder = sourceSpanBuilder;
         this.retrievalLifecycleLogger = retrievalLifecycleLogger;
+        this.documentScopeResolver = documentScopeResolver;
     }
 
     @Override
@@ -40,9 +44,15 @@ public class SearchDocumentSpansQueryHandler
     public SearchDocumentSpansResult handle(SearchDocumentSpansQuery query) {
         validate(query);
 
-        Set<DocumentId> documentIds = normalizeDocumentIds(query.scope().documentIds());
-        List<String> warnings = buildScopeWarnings(query.scope());
+        Set<DocumentId> documentIds = documentScopeResolver.resolve(
+                query.tenantId(),
+                query.scope().documentIds(),
+                query.scope().fileNames()
+        );
 
+        validateUnsupportedScope(query.scope(), documentIds);
+
+        List<String> warnings = buildScopeWarnings(query.scope());
         retrievalLifecycleLogger.searchRequested(
                 query.tenantId(),
                 query.userId(),
@@ -105,13 +115,22 @@ public class SearchDocumentSpansQueryHandler
             );
         }
     }
-
-    private Set<DocumentId> normalizeDocumentIds(List<DocumentId> documentIds) {
-        if (documentIds == null || documentIds.isEmpty()) {
-            return Set.of();
+    private void validateUnsupportedScope(
+            SearchDocumentSpansQuery.DocumentScope scope,
+            Set<DocumentId> resolvedDocumentIds
+    ) {
+        if (scope == null || !resolvedDocumentIds.isEmpty()) {
+            return;
         }
 
-        return new HashSet<>(documentIds);
+        boolean hasUnsupportedScope =
+                !scope.collectionIds().isEmpty()
+                        || !scope.tags().isEmpty()
+                        || !scope.metadataFilters().isEmpty();
+
+        if (hasUnsupportedScope) {
+            throw InvalidDocumentException.unsupportedScopeOnly();
+        }
     }
 
     private List<String> buildScopeWarnings(SearchDocumentSpansQuery.DocumentScope scope) {
@@ -119,10 +138,6 @@ public class SearchDocumentSpansQueryHandler
 
         if (scope == null) {
             return warnings;
-        }
-
-        if (!scope.fileNames().isEmpty()) {
-            warnings.add("file_names scope is accepted by API but not yet enforced in SearchDocumentSpansQueryHandler.");
         }
 
         if (!scope.collectionIds().isEmpty()) {

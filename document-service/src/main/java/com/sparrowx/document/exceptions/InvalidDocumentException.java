@@ -41,4 +41,44 @@ public class InvalidDocumentException extends BadRequestException {
                 List.of(queryName + " must not be null")
         );
     }
+
+    public static InvalidDocumentException scopeTargetNotFound(
+            String selectorType,
+            String value
+    ) {
+        String error = selectorType + " did not resolve to a document: " + value;
+
+        return new InvalidDocumentException(
+                "Document scope could not be resolved",
+                List.of(error)
+        );
+    }
+
+    public static InvalidDocumentException ambiguousScopeTarget(
+            String selectorType,
+            String value,
+            int matchCount
+    ) {
+        String error = selectorType
+                + " resolved to multiple documents: "
+                + value
+                + " (matches="
+                + matchCount
+                + ")";
+
+        return new InvalidDocumentException(
+                "Document scope is ambiguous",
+                List.of(error)
+        );
+    }
+
+    public static InvalidDocumentException unsupportedScopeOnly() {
+        return new InvalidDocumentException(
+                "Document scope could not be safely resolved",
+                List.of(
+                        "collection_ids, tags, and metadata_filters are not yet enforced; "
+                                + "provide document_ids or file_names"
+                )
+        );
+    }
 }

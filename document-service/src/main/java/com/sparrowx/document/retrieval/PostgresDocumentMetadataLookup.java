@@ -3,10 +3,12 @@ package com.sparrowx.document.retrieval;
 import com.sparrowx.document.data.postgres.entities.DocumentEntity;
 import com.sparrowx.document.data.postgres.repositories.DocumentRepository;
 import com.sparrowx.document.domain.valueobjects.DocumentId;
+import com.sparrowx.document.domain.valueobjects.DocumentStatus;
 import com.sparrowx.document.domain.valueobjects.TenantId;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -41,10 +43,7 @@ public class PostgresDocumentMetadataLookup implements DocumentMetadataLookup {
         }
 
         return documentRepository
-                .findByTenantIdAndDocumentIdIn(
-                        tenantId.value(),
-                        rawDocumentIds
-                )
+                .findByTenantIdAndDocumentIdIn(tenantId.value(), rawDocumentIds)
                 .stream()
                 .filter(Objects::nonNull)
                 .filter(entity -> entity.getDocumentId() != null && !entity.getDocumentId().isBlank())
@@ -53,6 +52,50 @@ public class PostgresDocumentMetadataLookup implements DocumentMetadataLookup {
                         this::toMetadata,
                         (left, right) -> left
                 ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DocumentMetadata> findReadyByTenantIdAndFileName(
+            TenantId tenantId,
+            String fileName
+    ) {
+        if (tenantId == null || fileName == null || fileName.isBlank()) {
+            return List.of();
+        }
+
+        return documentRepository
+                .findByTenantIdAndStatusAndFileName(
+                        tenantId.value(),
+                        DocumentStatus.READY,
+                        fileName.trim()
+                )
+                .stream()
+                .filter(Objects::nonNull)
+                .map(this::toMetadata)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DocumentMetadata> findReadyByTenantIdAndTitle(
+            TenantId tenantId,
+            String title
+    ) {
+        if (tenantId == null || title == null || title.isBlank()) {
+            return List.of();
+        }
+
+        return documentRepository
+                .findByTenantIdAndStatusAndTitle(
+                        tenantId.value(),
+                        DocumentStatus.READY,
+                        title.trim()
+                )
+                .stream()
+                .filter(Objects::nonNull)
+                .map(this::toMetadata)
+                .toList();
     }
 
     private DocumentMetadata toMetadata(DocumentEntity entity) {

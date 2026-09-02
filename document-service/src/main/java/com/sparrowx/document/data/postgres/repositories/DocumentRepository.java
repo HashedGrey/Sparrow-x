@@ -33,4 +33,16 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, String
             String tenantId,
             Collection<String> documentIds
     );
+
+    List<DocumentEntity> findByTenantIdAndStatusAndFileName(
+            String tenantId,
+            DocumentStatus status,
+            String fileName
+    );
+
+    List<DocumentEntity> findByTenantIdAndStatusAndTitle(
+            String tenantId,
+            DocumentStatus status,
+            String title
+    );
 }
