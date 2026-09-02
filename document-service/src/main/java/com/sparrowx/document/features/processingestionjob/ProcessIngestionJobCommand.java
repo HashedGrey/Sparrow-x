@@ -1,6 +1,6 @@
 package com.sparrowx.document.features.processingestionjob;
 
-import buildingblocks.core.commands.Command;
+import buildingblocks.core.commands.NonTransactionalCommand;
 import com.sparrowx.document.domain.valueobjects.FileName;
 import com.sparrowx.document.domain.valueobjects.IngestionJobId;
 import com.sparrowx.document.domain.valueobjects.MimeType;
@@ -19,5 +19,5 @@ public record ProcessIngestionJobCommand(
         ObjectKey objectKey,
         FileName fileName,
         MimeType mimeType
-) implements Command<ProcessIngestionJobResult> {
+) implements NonTransactionalCommand<ProcessIngestionJobResult> {
 }

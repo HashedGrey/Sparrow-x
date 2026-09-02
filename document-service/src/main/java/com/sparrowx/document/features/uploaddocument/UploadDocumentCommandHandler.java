@@ -24,7 +24,6 @@ import io.micrometer.core.instrument.Timer;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
@@ -84,7 +83,6 @@ public class UploadDocumentCommandHandler
     }
 
     @Override
-    @Transactional
     public UploadDocumentResult handle(UploadDocumentCommand command) {
         return uploadDurationTimer.record(() -> handleTimed(command));
     }

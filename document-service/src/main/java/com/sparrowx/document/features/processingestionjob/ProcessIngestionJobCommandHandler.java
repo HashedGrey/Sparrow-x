@@ -1,14 +1,7 @@
 package com.sparrowx.document.features.processingestionjob;
 
 import buildingblocks.core.commands.CommandHandler;
-import com.sparrowx.document.data.postgres.entities.DocumentEntity;
-import com.sparrowx.document.data.postgres.entities.IngestionJobEntity;
-import com.sparrowx.document.data.postgres.repositories.DocumentRepository;
-import com.sparrowx.document.data.postgres.repositories.IngestionJobRepository;
-import com.sparrowx.document.domain.valueobjects.DocumentStatus;
 import com.sparrowx.document.domain.valueobjects.IngestionStatus;
-import com.sparrowx.document.exceptions.DocumentNotFoundException;
-import com.sparrowx.document.exceptions.IngestionJobNotFoundException;
 import com.sparrowx.document.exceptions.InvalidDocumentException;
 import com.sparrowx.document.ingestion.DocumentProcessingResult;
 import com.sparrowx.document.ingestion.DocumentProcessor;
@@ -17,17 +10,13 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Instant;
 
 @Component
 public class ProcessIngestionJobCommandHandler
         implements CommandHandler<ProcessIngestionJobCommand, ProcessIngestionJobResult> {
 
-    private final DocumentRepository documentRepository;
-    private final IngestionJobRepository ingestionJobRepository;
     private final DocumentProcessor documentProcessor;
+    private final IngestionJobLifecycleService lifecycleService;
     private final IngestionLifecycleLogger ingestionLifecycleLogger;
 
     private final Timer ingestionDurationTimer;
@@ -38,15 +27,13 @@ public class ProcessIngestionJobCommandHandler
     private final Counter chunksIndexedCounter;
 
     public ProcessIngestionJobCommandHandler(
-            DocumentRepository documentRepository,
-            IngestionJobRepository ingestionJobRepository,
             DocumentProcessor documentProcessor,
+            IngestionJobLifecycleService lifecycleService,
             IngestionLifecycleLogger ingestionLifecycleLogger,
             MeterRegistry meterRegistry
     ) {
-        this.documentRepository = documentRepository;
-        this.ingestionJobRepository = ingestionJobRepository;
         this.documentProcessor = documentProcessor;
+        this.lifecycleService = lifecycleService;
         this.ingestionLifecycleLogger = ingestionLifecycleLogger;
 
         this.ingestionDurationTimer = Timer.builder("document.ingestion.duration")
@@ -75,7 +62,6 @@ public class ProcessIngestionJobCommandHandler
     }
 
     @Override
-    @Transactional
     public ProcessIngestionJobResult handle(ProcessIngestionJobCommand command) {
         return ingestionDurationTimer.record(() -> handleTimed(command));
     }
@@ -83,31 +69,21 @@ public class ProcessIngestionJobCommandHandler
     private ProcessIngestionJobResult handleTimed(ProcessIngestionJobCommand command) {
         validate(command);
 
-        IngestionJobEntity job = ingestionJobRepository
-                .findByIngestionJobId(command.ingestionJobId().value())
-                .orElseThrow(() -> new IngestionJobNotFoundException(
-                        command.ingestionJobId().value()
-                ));
+        IngestionJobLifecycleService.StartState startState = lifecycleService.start(
+                command.tenantId(),
+                command.documentId(),
+                command.ingestionJobId()
+        );
 
-        DocumentEntity document = documentRepository
-                .findByDocumentIdAndTenantId(
-                        command.documentId().value(),
-                        command.tenantId().value()
-                )
-                .orElseThrow(() -> new DocumentNotFoundException(
-                        command.documentId().value(),
-                        command.tenantId().value()
-                ));
-
-        if (job.getStatus() == IngestionStatus.COMPLETED) {
+        if (startState.alreadyCompleted()) {
             ingestionAlreadyCompletedCounter.increment();
 
             return new ProcessIngestionJobResult(
                     command.ingestionJobId(),
                     command.documentId(),
-                    job.getStatus(),
-                    job.getChunksCreated(),
-                    job.getChunksIndexed()
+                    startState.status(),
+                    startState.chunksCreated(),
+                    startState.chunksIndexed()
             );
         }
 
@@ -118,8 +94,6 @@ public class ProcessIngestionJobCommandHandler
         );
 
         try {
-            markInProgress(job, document, IngestionStatus.EXTRACTING);
-
             DocumentProcessingResult processingResult = documentProcessor.process(
                     new DocumentProcessor.ProcessDocumentRequest(
                             command.ingestionJobId(),
@@ -133,17 +107,13 @@ public class ProcessIngestionJobCommandHandler
                     )
             );
 
-            job.setStatus(IngestionStatus.COMPLETED);
-            job.setChunksCreated(processingResult.chunksCreated());
-            job.setChunksIndexed(processingResult.chunksIndexed());
-            job.setFailureReason(null);
-            job.setCompletedAt(Instant.now());
-
-            document.setStatus(DocumentStatus.READY);
-            document.setUpdatedAt(Instant.now());
-
-            ingestionJobRepository.save(job);
-            documentRepository.save(document);
+            lifecycleService.complete(
+                    command.tenantId(),
+                    command.documentId(),
+                    command.ingestionJobId(),
+                    processingResult.chunksCreated(),
+                    processingResult.chunksIndexed()
+            );
 
             ingestionCompletedCounter.increment();
             chunksCreatedCounter.increment(processingResult.chunksCreated());
@@ -166,15 +136,16 @@ public class ProcessIngestionJobCommandHandler
             );
 
         } catch (RuntimeException exception) {
-            job.setStatus(IngestionStatus.FAILED);
-            job.setFailureReason(exception.getMessage());
-            job.setCompletedAt(Instant.now());
-
-            document.setStatus(DocumentStatus.FAILED);
-            document.setUpdatedAt(Instant.now());
-
-            ingestionJobRepository.save(job);
-            documentRepository.save(document);
+            try {
+                lifecycleService.fail(
+                        command.tenantId(),
+                        command.documentId(),
+                        command.ingestionJobId(),
+                        exception.getMessage()
+                );
+            } catch (RuntimeException persistenceException) {
+                exception.addSuppressed(persistenceException);
+            }
 
             ingestionFailedCounter.increment();
 
@@ -187,20 +158,6 @@ public class ProcessIngestionJobCommandHandler
 
             throw exception;
         }
-    }
-
-    private void markInProgress(
-            IngestionJobEntity job,
-            DocumentEntity document,
-            IngestionStatus status
-    ) {
-        job.setStatus(status);
-
-        document.setStatus(DocumentStatus.INGESTING);
-        document.setUpdatedAt(Instant.now());
-
-        ingestionJobRepository.save(job);
-        documentRepository.save(document);
     }
 
     private void validate(ProcessIngestionJobCommand command) {
