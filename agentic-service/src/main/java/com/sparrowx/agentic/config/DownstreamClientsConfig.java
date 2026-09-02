@@ -90,7 +90,7 @@ public final class DownstreamClientsConfig {
                 Duration.ofSeconds(15),
 
                 DocumentClientResiliencePolicy.Operation.BUILD_DOCUMENT_EVIDENCE,
-                Duration.ofSeconds(30),
+                Duration.ofSeconds(60),
 
                 DocumentClientResiliencePolicy.Operation.VERIFY_EVIDENCE_GRAPH,
                 Duration.ofSeconds(20)

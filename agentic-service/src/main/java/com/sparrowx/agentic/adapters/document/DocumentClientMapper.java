@@ -10,12 +10,20 @@ public final class DocumentClientMapper {
 
     private static final String AGENTIC_SERVICE = "agentic-service";
 
+    private static final Metadata.Key<String> INTERNAL_CALL_HEADER =
+            Metadata.Key.of("x-internal-call", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> USER_ID_HEADER =
+            Metadata.Key.of("x-user-id", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> TENANT_ID_HEADER =
+            Metadata.Key.of("x-tenant-id", Metadata.ASCII_STRING_MARSHALLER);
+
+    private static final Metadata.Key<String> ROLES_HEADER =
+            Metadata.Key.of("x-roles", Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> REQUEST_ID_HEADER =
             Metadata.Key.of("x-sparrowx-request-id", Metadata.ASCII_STRING_MARSHALLER);
-    private static final Metadata.Key<String> TENANT_ID_HEADER =
-            Metadata.Key.of("x-sparrowx-tenant-id", Metadata.ASCII_STRING_MARSHALLER);
-    private static final Metadata.Key<String> USER_ID_HEADER =
-            Metadata.Key.of("x-sparrowx-user-id", Metadata.ASCII_STRING_MARSHALLER);
+
     private static final Metadata.Key<String> PROJECT_ID_HEADER =
             Metadata.Key.of("x-sparrowx-project-id", Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> TEAM_ID_HEADER =
@@ -49,23 +57,30 @@ public final class DocumentClientMapper {
         return toRequestContext(context, context.requestId());
     }
 
-    public Metadata toMetadata(
-            MissionContext context,
-            String requestId
-    ) {
+    public Metadata toMetadata(MissionContext context, String requestId) {
         Objects.requireNonNull(context, "context must not be null");
         requireTenant(context.tenantId());
         requestId = requireText(requestId, "requestId");
 
         Metadata metadata = new Metadata();
-        putIfPresent(metadata, REQUEST_ID_HEADER, requestId);
-        putIfPresent(metadata, TENANT_ID_HEADER, context.tenantId());
+
+        metadata.put(INTERNAL_CALL_HEADER, "true");
+        metadata.put(TENANT_ID_HEADER, context.tenantId());
+
         putIfPresent(metadata, USER_ID_HEADER, context.userId());
+        metadata.put(ROLES_HEADER, "USER");
+
+        putIfPresent(metadata, REQUEST_ID_HEADER, requestId);
         putIfPresent(metadata, PROJECT_ID_HEADER, context.projectId());
         putIfPresent(metadata, TEAM_ID_HEADER, context.teamId());
         putIfPresent(metadata, TRACE_ID_HEADER, context.traceId());
-        putIfPresent(metadata, CALLER_SERVICE_HEADER, callerService(context));
+        putIfPresent(metadata, CALLER_SERVICE_HEADER, AGENTIC_SERVICE);
+
         return metadata;
+    }
+
+    public Metadata toMetadata(MissionContext context) {
+        return toMetadata(context, context.requestId());
     }
 
 
@@ -76,23 +91,10 @@ public final class DocumentClientMapper {
         return value;
     }
 
-    public Metadata toMetadata(MissionContext context) {
-        Objects.requireNonNull(context, "context must not be null");
-        requireTenant(context.tenantId());
 
-        Metadata metadata = new Metadata();
-        putIfPresent(metadata, REQUEST_ID_HEADER, context.requestId());
-        putIfPresent(metadata, TENANT_ID_HEADER, context.tenantId());
-        putIfPresent(metadata, USER_ID_HEADER, context.userId());
-        putIfPresent(metadata, PROJECT_ID_HEADER, context.projectId());
-        putIfPresent(metadata, TEAM_ID_HEADER, context.teamId());
-        putIfPresent(metadata, TRACE_ID_HEADER, context.traceId());
-        putIfPresent(metadata, CALLER_SERVICE_HEADER, callerService(context));
-        return metadata;
-    }
 
     private static String callerService(MissionContext context) {
-        return context.callerService().isBlank() ? AGENTIC_SERVICE : context.callerService();
+        return  AGENTIC_SERVICE;
     }
 
     private static void requireTenant(String tenantId) {

@@ -41,7 +41,7 @@ embabel:
         bean: false
       llm-operations:
         data-binding:
-          max-attempts: 1
+          max-attempts: 2
       models:
         gemini:
           api-key: ${GEMINI_API_KEY}
