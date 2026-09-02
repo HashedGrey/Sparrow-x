@@ -6,10 +6,7 @@ import com.sparrowx.agentic.exceptions.MissionNotFoundException;
 import com.sparrowx.agentic.mission.MissionLifecycleService;
 import com.sparrowx.agentic.mission.Terminalizer;
 import com.sparrowx.agentic.mission.artifact.ArtifactPreparationResult;
-import com.sparrowx.agentic.mission.model.Mission;
-import com.sparrowx.agentic.mission.model.MissionRequest;
-import com.sparrowx.agentic.mission.model.MissionResult;
-import com.sparrowx.agentic.mission.model.MissionStatus;
+import com.sparrowx.agentic.mission.model.*;
 import com.sparrowx.agentic.mission.store.MissionStore;
 import com.sparrowx.agentic.runtime.checkpoint.CheckpointRef;
 import com.sparrowx.agentic.runtime.checkpoint.CheckpointSerializer;
@@ -21,6 +18,7 @@ import com.sparrowx.agentic.temporal.model.MissionWorkflowInput;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -122,6 +120,44 @@ public final class MissionActivitiesImpl implements MissionActivities {
                         terminalMission.completedAt(),
                         "terminal mission must have completedAt"
                 )
+        );
+    }
+
+    @Override
+    public FailMissionResult failMission(
+            FailMissionRequest request
+    ) {
+        Objects.requireNonNull(
+                request,
+                "request must not be null"
+        );
+
+        MissionFailure failure = new MissionFailure(
+                request.code(),
+                request.message(),
+                MissionFailureReason.UNSPECIFIED,
+                false,
+                "mission-agent",
+                "runMission",
+                "embabel",
+                Map.of(
+                        "errorReference",
+                        request.errorReference()
+                )
+        );
+
+        Mission terminalMission = terminalizer.failTerminal(
+                request.tenantId(),
+                request.missionId(),
+                failure
+        );
+
+        return new FailMissionResult(
+                Objects.requireNonNull(
+                        terminalMission.completedAt(),
+                        "failed mission must have completedAt"
+                ),
+                request.errorReference()
         );
     }
 

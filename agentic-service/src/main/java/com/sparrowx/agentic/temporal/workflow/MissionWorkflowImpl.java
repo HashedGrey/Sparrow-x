@@ -11,6 +11,7 @@ import com.sparrowx.agentic.temporal.model.MissionWorkflowState;
 import com.sparrowx.agentic.temporal.model.MissionWorkflowState.PendingGate;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
+import io.temporal.failure.ActivityFailure;
 import io.temporal.failure.CanceledFailure;
 import io.temporal.workflow.CancellationScope;
 import io.temporal.workflow.Workflow;
@@ -72,8 +73,12 @@ public final class MissionWorkflowImpl implements MissionWorkflow {
             );
             try {
                 embabelScope.run();
+
             } catch (CanceledFailure cancelled) {
                 cancelPersistedMission();
+
+            } catch (ActivityFailure failure) {
+                failPersistedMission(failure);
             }
         }
 
@@ -142,6 +147,36 @@ public final class MissionWorkflowImpl implements MissionWorkflow {
         }
     }
 
+    private void failPersistedMission(
+            ActivityFailure failure
+    ) {
+        String errorReference =
+                "activity:"
+                        + input.missionId()
+                        + ":RunEmbabelMission";
+
+        String message =
+                failure.getMessage() == null
+                        || failure.getMessage().isBlank()
+                        ? "Embabel mission execution failed"
+                        : failure.getMessage();
+
+        MissionActivities.FailMissionResult result =
+                activities.failMission(
+                        new MissionActivities.FailMissionRequest(
+                                input.tenantId(),
+                                input.missionId(),
+                                "EMBABEL_EXECUTION_FAILED",
+                                message,
+                                errorReference
+                        )
+                );
+
+        workflowState = workflowState.failed(
+                result.errorReference(),
+                result.completedAt()
+        );
+    }
     @Override
     public MissionWorkflowState approve(
             MissionWorkflowCommand command
@@ -235,27 +270,30 @@ public final class MissionWorkflowImpl implements MissionWorkflow {
     }
 
     private MissionWorkflowOutcome terminalOutcome() {
-        if (workflowState.status() == MissionStatus.COMPLETED) {
-            return new MissionWorkflowOutcome(
-                    input.missionId(),
-                    input.tenantId(),
-                    MissionStatus.COMPLETED,
-                    workflowState.resultRef(),
-                    "",
-                    workflowState.startedAt(),
-                    workflowState.completedAt(),
-                    null
+        if (!workflowState.terminal()) {
+            throw new IllegalStateException(
+                    "Workflow outcome requires terminal state"
             );
         }
+
         return new MissionWorkflowOutcome(
                 input.missionId(),
                 input.tenantId(),
-                MissionStatus.CANCELLED,
-                null,
-                "",
+                workflowState.status(),
+                workflowState.status() == MissionStatus.COMPLETED
+                        ? workflowState.resultRef()
+                        : null,
+                workflowState.status() == MissionStatus.FAILED_TERMINAL
+                        ? workflowState.errorReference()
+                        : "",
                 workflowState.startedAt(),
-                workflowState.completedAt(),
-                workflowState.cancelledAt()
+                Objects.requireNonNull(
+                        workflowState.completedAt(),
+                        "terminal state requires completedAt"
+                ),
+                workflowState.status() == MissionStatus.CANCELLED
+                        ? workflowState.cancelledAt()
+                        : null
         );
     }
 

@@ -23,6 +23,7 @@ public record MissionWorkflowState(
         Map<String, String> processedUpdateFingerprints,
         String cancellationReason,
         CheckpointRef resultRef,
+        String errorReference,
         Instant startedAt,
         Instant completedAt,
         Instant cancelledAt,
@@ -32,27 +33,83 @@ public record MissionWorkflowState(
 
     public MissionWorkflowState {
         missionId = requireText(missionId, "missionId");
+
         tenantId = requireText(tenantId, "tenantId");
+
         status = Objects.requireNonNull(status, "status must not be null");
-        approvedGateIds = approvedGateIds == null
-                ? Set.of()
-                : Set.copyOf(approvedGateIds);
-        processedUpdateFingerprints = processedUpdateFingerprints == null
-                ? Map.of()
-                : Map.copyOf(processedUpdateFingerprints);
-        cancellationReason = cancellationReason == null
-                ? ""
-                : cancellationReason;
-        startedAt = Objects.requireNonNull(
-                startedAt,
-                "startedAt must not be null"
+
+        approvedGateIds = approvedGateIds == null ? Set.of() : Set.copyOf(approvedGateIds);
+
+        processedUpdateFingerprints =
+                processedUpdateFingerprints == null
+                        ? Map.of()
+                        : Map.copyOf(processedUpdateFingerprints);
+
+        cancellationReason = cancellationReason == null ? "" : cancellationReason;
+
+        errorReference = errorReference == null ? "" : errorReference;
+
+        startedAt = Objects.requireNonNull(startedAt, "startedAt must not be null"
         );
+
+        if (status == MissionStatus.COMPLETED
+                && resultRef == null) {
+            throw new IllegalArgumentException(
+                    "COMPLETED state requires resultRef"
+            );
+        }
+
+        if (status != MissionStatus.COMPLETED
+                && resultRef != null) {
+            throw new IllegalArgumentException(
+                    "resultRef is reserved for COMPLETED state"
+            );
+        }
+
+        if (status == MissionStatus.FAILED_TERMINAL
+                && errorReference.isBlank()) {
+            throw new IllegalArgumentException(
+                    "FAILED_TERMINAL state requires errorReference"
+            );
+        }
+
+        if (status != MissionStatus.FAILED_TERMINAL
+                && !errorReference.isBlank()) {
+            throw new IllegalArgumentException(
+                    "errorReference is reserved for FAILED_TERMINAL state"
+            );
+        }
+
+        boolean terminalStatus =
+                status == MissionStatus.COMPLETED
+                        || status == MissionStatus.FAILED_TERMINAL
+                        || status == MissionStatus.CANCELLED;
+
+        if (terminalStatus && completedAt == null) {
+            throw new IllegalArgumentException("terminal state requires completedAt");
+        }
+
+        if (!terminalStatus && completedAt != null) {
+            throw new IllegalArgumentException("non-terminal state must not have completedAt");
+        }
+
+        if (status == MissionStatus.CANCELLED
+                && cancelledAt == null) {
+            throw new IllegalArgumentException("CANCELLED state requires cancelledAt");
+        }
+
+        if (status != MissionStatus.CANCELLED
+                && cancelledAt != null) {
+            throw new IllegalArgumentException("cancelledAt is reserved for CANCELLED state");
+        }
     }
 
     public static MissionWorkflowState initial(
             MissionWorkflowInput input,
             Instant startedAt
     ) {
+        Objects.requireNonNull(input, "input must not be null");
+
         return new MissionWorkflowState(
                 input.missionId(),
                 input.tenantId(),
@@ -62,6 +119,7 @@ public record MissionWorkflowState(
                 Map.of(),
                 "",
                 null,
+                "",
                 startedAt,
                 null,
                 null,
@@ -70,14 +128,20 @@ public record MissionWorkflowState(
         );
     }
 
-    public MissionWorkflowState waitingFor(PendingGate gate) {
+    public MissionWorkflowState waitingFor(
+            PendingGate gate
+    ) {
         return copy(
-                MissionStatus.RUNNING,
-                Objects.requireNonNull(gate, "gate must not be null"),
+                MissionStatus.WAITING_APPROVAL,
+                Objects.requireNonNull(
+                        gate,
+                        "gate must not be null"
+                ),
                 approvedGateIds,
                 processedUpdateFingerprints,
                 "",
-                resultRef,
+                null,
+                "",
                 null,
                 null
         );
@@ -90,7 +154,8 @@ public record MissionWorkflowState(
                 approvedGateIds,
                 processedUpdateFingerprints,
                 "",
-                resultRef,
+                null,
+                "",
                 null,
                 null
         );
@@ -101,20 +166,33 @@ public record MissionWorkflowState(
             Instant decidedAt
     ) {
         requirePendingGate(command);
-        Objects.requireNonNull(decidedAt, "decidedAt must not be null");
-        Set<String> approvals = new LinkedHashSet<>(approvedGateIds);
+
+        Objects.requireNonNull(
+                decidedAt,
+                "decidedAt must not be null"
+        );
+
+        Set<String> approvals =
+                new LinkedHashSet<>(approvedGateIds);
+
         approvals.add(command.gateId());
+
         MissionWorkflowState next = copy(
                 MissionStatus.RUNNING,
                 null,
                 approvals,
                 withProcessed(command),
                 "",
-                resultRef,
+                null,
+                "",
                 null,
                 null
         );
-        return next.withDecisionTimes(decidedAt, rejectedAt);
+
+        return next.withDecisionTimes(
+                decidedAt,
+                rejectedAt
+        );
     }
 
     public MissionWorkflowState rejected(
@@ -122,6 +200,12 @@ public record MissionWorkflowState(
             Instant decidedAt
     ) {
         requirePendingGate(command);
+
+        Objects.requireNonNull(
+                decidedAt,
+                "decidedAt must not be null"
+        );
+
         MissionWorkflowState next = copy(
                 MissionStatus.CANCELLED,
                 null,
@@ -129,10 +213,15 @@ public record MissionWorkflowState(
                 withProcessed(command),
                 "Gate rejected: " + command.reason(),
                 null,
+                "",
                 decidedAt,
                 decidedAt
         );
-        return next.withDecisionTimes(approvedAt, decidedAt);
+
+        return next.withDecisionTimes(
+                approvedAt,
+                decidedAt
+        );
     }
 
     public MissionWorkflowState cancelled(
@@ -140,6 +229,12 @@ public record MissionWorkflowState(
             Instant decidedAt
     ) {
         requireCommand(command);
+
+        Objects.requireNonNull(
+                decidedAt,
+                "decidedAt must not be null"
+        );
+
         return copy(
                 MissionStatus.CANCELLED,
                 null,
@@ -147,6 +242,7 @@ public record MissionWorkflowState(
                 withProcessed(command),
                 command.reason(),
                 null,
+                "",
                 decidedAt,
                 decidedAt
         );
@@ -156,6 +252,11 @@ public record MissionWorkflowState(
             String reason,
             Instant decidedAt
     ) {
+        Objects.requireNonNull(
+                decidedAt,
+                "decidedAt must not be null"
+        );
+
         return copy(
                 MissionStatus.CANCELLED,
                 null,
@@ -163,6 +264,7 @@ public record MissionWorkflowState(
                 processedUpdateFingerprints,
                 requireText(reason, "reason"),
                 null,
+                "",
                 decidedAt,
                 decidedAt
         );
@@ -182,6 +284,30 @@ public record MissionWorkflowState(
                         reference,
                         "reference must not be null"
                 ),
+                "",
+                Objects.requireNonNull(
+                        completionTime,
+                        "completionTime must not be null"
+                ),
+                null
+        );
+    }
+
+    public MissionWorkflowState failed(
+            String failureReference,
+            Instant completionTime
+    ) {
+        return copy(
+                MissionStatus.FAILED_TERMINAL,
+                null,
+                approvedGateIds,
+                processedUpdateFingerprints,
+                "",
+                null,
+                requireText(
+                        failureReference,
+                        "failureReference"
+                ),
                 Objects.requireNonNull(
                         completionTime,
                         "completionTime must not be null"
@@ -192,43 +318,63 @@ public record MissionWorkflowState(
 
     public boolean terminal() {
         return status == MissionStatus.COMPLETED
-                || status == MissionStatus.CANCELLED
-                || status == MissionStatus.FAILED_TERMINAL;
+                || status == MissionStatus.FAILED_TERMINAL
+                || status == MissionStatus.CANCELLED;
     }
 
-    /** Compatibility accessor for handlers written against the old state. */
+    /**
+     * Compatibility accessor for handlers written against the old state.
+     */
     public MissionStatus currentStatus() {
         return status;
     }
 
-    public boolean alreadyProcessed(MissionWorkflowCommand command) {
+    public boolean alreadyProcessed(
+            MissionWorkflowCommand command
+    ) {
         requireCommand(command);
-        String fingerprint = processedUpdateFingerprints.get(
-                command.updateId()
-        );
+
+        String fingerprint =
+                processedUpdateFingerprints.get(
+                        command.updateId()
+                );
+
         if (fingerprint == null) {
             return false;
         }
+
         if (!fingerprint.equals(command.fingerprint())) {
             throw new IllegalStateException(
-                    "WORKFLOW_UPDATE_ID_CONFLICT: " + command.updateId()
+                    "WORKFLOW_UPDATE_ID_CONFLICT: "
+                            + command.updateId()
             );
         }
+
         return true;
     }
 
-    public void requirePendingGate(MissionWorkflowCommand command) {
+    public void requirePendingGate(
+            MissionWorkflowCommand command
+    ) {
         requireCommand(command);
+
         if (pendingGate == null
-                || !pendingGate.gateId().equals(command.gateId())) {
+                || !pendingGate.gateId()
+                .equals(command.gateId())) {
             throw new IllegalStateException(
                     "command does not target the pending gate"
             );
         }
     }
 
-    public void requireCommand(MissionWorkflowCommand command) {
-        Objects.requireNonNull(command, "command must not be null");
+    public void requireCommand(
+            MissionWorkflowCommand command
+    ) {
+        Objects.requireNonNull(
+                command,
+                "command must not be null"
+        );
+
         if (!missionId.equals(command.missionId())
                 || !tenantId.equals(command.tenantId())) {
             throw new IllegalArgumentException(
@@ -240,19 +386,24 @@ public record MissionWorkflowState(
     private Map<String, String> withProcessed(
             MissionWorkflowCommand command
     ) {
-        Map<String, String> values = new LinkedHashMap<>(
-                processedUpdateFingerprints
-        );
+        Map<String, String> values =
+                new LinkedHashMap<>(
+                        processedUpdateFingerprints
+                );
+
         String previous = values.put(
                 command.updateId(),
                 command.fingerprint()
         );
+
         if (previous != null
                 && !previous.equals(command.fingerprint())) {
             throw new IllegalStateException(
-                    "WORKFLOW_UPDATE_ID_CONFLICT: " + command.updateId()
+                    "WORKFLOW_UPDATE_ID_CONFLICT: "
+                            + command.updateId()
             );
         }
+
         return Map.copyOf(values);
     }
 
@@ -263,6 +414,7 @@ public record MissionWorkflowState(
             Map<String, String> updates,
             String cancelReason,
             CheckpointRef nextResult,
+            String nextErrorReference,
             Instant nextCompletedAt,
             Instant nextCancelledAt
     ) {
@@ -275,6 +427,7 @@ public record MissionWorkflowState(
                 updates,
                 cancelReason,
                 nextResult,
+                nextErrorReference,
                 startedAt,
                 nextCompletedAt,
                 nextCancelledAt,
@@ -296,6 +449,7 @@ public record MissionWorkflowState(
                 processedUpdateFingerprints,
                 cancellationReason,
                 resultRef,
+                errorReference,
                 startedAt,
                 completedAt,
                 cancelledAt,
@@ -304,12 +458,16 @@ public record MissionWorkflowState(
         );
     }
 
-    private static String requireText(String value, String field) {
+    private static String requireText(
+            String value,
+            String field
+    ) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(
                     field + " must not be blank"
             );
         }
+
         return value.trim();
     }
 
@@ -321,21 +479,40 @@ public record MissionWorkflowState(
             Instant createdAt,
             Instant expiresAt
     ) {
+
         public PendingGate {
-            gateId = requireText(gateId, "gateId");
-            title = requireText(title, "title");
-            reason = requireText(reason, "reason");
-            requiredReviewerRoles = requiredReviewerRoles == null
-                    ? Set.of()
-                    : Set.copyOf(requiredReviewerRoles);
+            gateId = requireText(
+                    gateId,
+                    "gateId"
+            );
+
+            title = requireText(
+                    title,
+                    "title"
+            );
+
+            reason = requireText(
+                    reason,
+                    "reason"
+            );
+
+            requiredReviewerRoles =
+                    requiredReviewerRoles == null
+                            ? Set.of()
+                            : Set.copyOf(
+                            requiredReviewerRoles
+                    );
+
             createdAt = Objects.requireNonNull(
                     createdAt,
                     "createdAt must not be null"
             );
+
             expiresAt = Objects.requireNonNull(
                     expiresAt,
                     "expiresAt must not be null"
             );
+
             if (!expiresAt.isAfter(createdAt)) {
                 throw new IllegalArgumentException(
                         "expiresAt must be after createdAt"

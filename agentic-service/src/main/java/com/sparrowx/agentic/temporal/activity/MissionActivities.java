@@ -30,6 +30,9 @@ public interface MissionActivities {
     @ActivityMethod(name = "CancelMission")
     Instant cancelMission(CancelMissionRequest request);
 
+    @ActivityMethod(name = "FailMission")
+    FailMissionResult failMission(FailMissionRequest request);
+
     record RunMissionRequest(
             MissionWorkflowInput workflowInput,
             Set<String> approvedGateIds,
@@ -93,6 +96,41 @@ public interface MissionActivities {
             decidedAt = Objects.requireNonNull(
                     decidedAt,
                     "decidedAt must not be null"
+            );
+        }
+    }
+
+    record FailMissionRequest(
+            String tenantId,
+            String missionId,
+            String code,
+            String message,
+            String errorReference
+    ) {
+        public FailMissionRequest {
+            tenantId = requireText(tenantId, "tenantId");
+            missionId = requireText(missionId, "missionId");
+            code = requireText(code, "code");
+            message = requireText(message, "message");
+            errorReference = requireText(
+                    errorReference,
+                    "errorReference"
+            );
+        }
+    }
+
+    record FailMissionResult(
+            Instant completedAt,
+            String errorReference
+    ) {
+        public FailMissionResult {
+            completedAt = Objects.requireNonNull(
+                    completedAt,
+                    "completedAt must not be null"
+            );
+            errorReference = requireText(
+                    errorReference,
+                    "errorReference"
             );
         }
     }
