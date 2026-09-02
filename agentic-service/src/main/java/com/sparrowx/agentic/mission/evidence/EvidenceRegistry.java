@@ -62,6 +62,19 @@ public final class EvidenceRegistry {
     }
 
     private static String identityOf(EvidenceRef evidence) {
+        if (evidence.sourceType() == EvidenceSourceType.INTERNAL_ENTITY) {
+            String entityId = firstNonBlank(evidence.sourceId(), evidence.objectId());
+
+            if (!entityId.isBlank()) {
+                return String.join(
+                        String.valueOf(IDENTITY_SEPARATOR),
+                        evidence.sourceType().name(),
+                        evidence.sourceService(),
+                        entityId
+                );
+            }
+        }
+
         return String.join(
                 String.valueOf(IDENTITY_SEPARATOR),
                 evidence.sourceType().name(),
@@ -76,6 +89,16 @@ public final class EvidenceRegistry {
                 evidence.section(),
                 evidence.sha256()
         );
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+
+        return "";
     }
 
     private static String stableEvidenceId(String identity) {

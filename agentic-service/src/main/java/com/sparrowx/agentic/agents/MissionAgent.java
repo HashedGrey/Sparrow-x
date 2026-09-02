@@ -5,7 +5,6 @@ import com.embabel.agent.api.annotation.Action;
 import com.embabel.agent.api.annotation.Agent;
 import com.embabel.agent.api.common.OperationContext;
 import com.embabel.agent.core.ActionRetryPolicy;
-import com.sparrowx.agentic.actions.synthesis.BuildCitationsAction;
 import com.sparrowx.agentic.components.IntentComponent;
 import com.sparrowx.agentic.components.IntentComponent.IntentRequest;
 import com.sparrowx.agentic.components.PlanningComponent;
@@ -53,35 +52,16 @@ public final class MissionAgent {
     private final PlanningComponent planningComponent;
     private final MissionEvidenceService evidenceService;
     private final SynthesisComponent synthesisComponent;
-    private final BuildCitationsAction citationsAction;
 
     public MissionAgent(
             IntentComponent intentComponent,
             PlanningComponent planningComponent,
             MissionEvidenceService evidenceService,
-            SynthesisComponent synthesisComponent,
-            BuildCitationsAction citationsAction
-    ) {
-        this.intentComponent = Objects.requireNonNull(
-                intentComponent,
-                "intentComponent must not be null"
-        );
-        this.planningComponent = Objects.requireNonNull(
-                planningComponent,
-                "planningComponent must not be null"
-        );
-        this.evidenceService = Objects.requireNonNull(
-                evidenceService,
-                "evidenceService must not be null"
-        );
-        this.synthesisComponent = Objects.requireNonNull(
-                synthesisComponent,
-                "synthesisComponent must not be null"
-        );
-        this.citationsAction = Objects.requireNonNull(
-                citationsAction,
-                "citationsAction must not be null"
-        );
+            SynthesisComponent synthesisComponent) {
+        this.intentComponent = Objects.requireNonNull(intentComponent, "intentComponent must not be null");
+        this.planningComponent = Objects.requireNonNull(planningComponent, "planningComponent must not be null");
+        this.evidenceService = Objects.requireNonNull(evidenceService, "evidenceService must not be null");
+        this.synthesisComponent = Objects.requireNonNull(synthesisComponent, "synthesisComponent must not be null");
     }
 
     @Action(description = "Interpret the normalized mission request")
@@ -178,6 +158,7 @@ public final class MissionAgent {
         Objects.requireNonNull(input, "input must not be null");
         Objects.requireNonNull(evidence, "evidence must not be null");
         Objects.requireNonNull(context, "context must not be null");
+
         SynthesisRequest request = new SynthesisRequest(
                 input.missionId(),
                 true,
@@ -185,6 +166,7 @@ public final class MissionAgent {
                 planState.plan(),
                 evidence.observations(),
                 evidence.evidenceRefs(),
+                evidence.citations(),
                 List.of(),
                 intentState.intent().requiredOutputSections(),
                 Map.of(
@@ -194,12 +176,6 @@ public final class MissionAgent {
         );
 
         SynthesisDraft draft = synthesisComponent.synthesize(request, context);
-        BuildCitationsAction.Result citations = citationsAction.execute(
-                new BuildCitationsAction.BuildSpec(
-                        evidence.evidenceRefs(),
-                        evidence.excerptsByEvidenceId()
-                )
-        );
 
         Map<String, Object> debug = new LinkedHashMap<>(
                 draft.debugSummary()
@@ -220,8 +196,8 @@ public final class MissionAgent {
                 draft.sections(),
                 draft.findings(),
                 draft.recommendations(),
-                citations.evidenceRefs(),
-                citations.citations(),
+                evidence.evidenceRefs(),
+                evidence.citations(),
                 request.governanceDecisions(),
                 draft.structuredOutput(),
                 Map.copyOf(debug)

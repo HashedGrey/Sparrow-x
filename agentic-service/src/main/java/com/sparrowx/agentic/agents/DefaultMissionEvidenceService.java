@@ -2,7 +2,10 @@ package com.sparrowx.agentic.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparrowx.agentic.actions.document.BuildDocumentEvidenceAction;
+import com.sparrowx.agentic.actions.document.VerifyEvidenceGraphAction;
+import com.sparrowx.agentic.actions.synthesis.BuildCitationsAction;
 import com.sparrowx.agentic.components.PlanningComponent.Observation;
+import com.sparrowx.agentic.mission.evidence.Citation;
 import com.sparrowx.agentic.mission.evidence.EvidenceRef;
 import com.sparrowx.agentic.mission.evidence.EvidenceRegistry;
 import com.sparrowx.agentic.planning.MissionIntent;
@@ -11,7 +14,10 @@ import com.sparrowx.agentic.planning.PlannedStep;
 import com.sparrowx.agentic.planning.StepKind;
 import com.sparrowx.agentic.steps.BuildDocumentEvidenceStep;
 import com.sparrowx.agentic.steps.ResolveInternalContextStep;
+import com.sparrowx.agentic.tools.document.DocumentEvidenceMapper;
 import com.sparrowx.agentic.tools.document.DocumentEvidenceRequestBuilder.BuildSpec;
+import com.sparrowx.document.proto.DocumentEvidenceGraphProto;
+import com.sparrowx.document.proto.VerificationStatusProto;
 import org.springframework.stereotype.Component;
 import com.sparrowx.agentic.tools.document.DocumentSpanSearchRequestBuilder.Scope;
 
@@ -40,24 +46,24 @@ public final class DefaultMissionEvidenceService
     private final BuildDocumentEvidenceStep documentStep;
     private final ResolveInternalContextStep internalStep;
     private final ObjectMapper objectMapper;
+    private final VerifyEvidenceGraphAction verifyEvidenceAction;
+    private final BuildCitationsAction citationsAction;
+    private final DocumentEvidenceMapper documentEvidenceMapper;
 
     public DefaultMissionEvidenceService(
             BuildDocumentEvidenceStep documentStep,
             ResolveInternalContextStep internalStep,
+            VerifyEvidenceGraphAction verifyEvidenceAction,
+            BuildCitationsAction citationsAction,
+            DocumentEvidenceMapper documentEvidenceMapper,
             ObjectMapper objectMapper
     ) {
-        this.documentStep = Objects.requireNonNull(
-                documentStep,
-                "documentStep must not be null"
-        );
-        this.internalStep = Objects.requireNonNull(
-                internalStep,
-                "internalStep must not be null"
-        );
-        this.objectMapper = Objects.requireNonNull(
-                objectMapper,
-                "objectMapper must not be null"
-        );
+        this.documentStep = Objects.requireNonNull(documentStep, "documentStep must not be null");
+        this.internalStep = Objects.requireNonNull(internalStep, "internalStep must not be null");
+        this.verifyEvidenceAction = Objects.requireNonNull(verifyEvidenceAction, "verifyEvidenceAction must not be null");
+        this.citationsAction = Objects.requireNonNull(citationsAction, "citationsAction must not be null");
+        this.documentEvidenceMapper = Objects.requireNonNull(documentEvidenceMapper, "documentEvidenceMapper must not be null");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     @Override
@@ -78,10 +84,14 @@ public final class DefaultMissionEvidenceService
         }
 
         List<Observation> observations = new ArrayList<>();
-        List<EvidenceRef> collectedEvidence = new ArrayList<>();
+        Map<String, EvidenceRef> collectedEvidence = new LinkedHashMap<>();
         List<String> warnings = new ArrayList<>();
         Set<String> completed = new LinkedHashSet<>();
         Map<String, StepResult> completedResults = new LinkedHashMap<>();
+
+        List<Citation> citations = List.of();
+        Set<String> verifiedEvidenceIds = new LinkedHashSet<>();
+
         List<PlannedStep> pending = new ArrayList<>(plan.steps());
 
         while (!pending.isEmpty()) {
@@ -94,15 +104,19 @@ public final class DefaultMissionEvidenceService
                                     + "or missing dependency"
                     ));
 
-            PlannedStep executableStep =
-                    hydrateDependencyArguments(
-                            step,
-                            completedResults
-                    );
-
-            StepResult result = executeStep(
-                    input,
-                    executableStep
+            PlannedStep executableStep = hydrateDependencyArguments(step, completedResults);
+            StepResult result;
+            if (shouldSkipUnresolvedGraphStep(executableStep)) {
+                result = skippedGraphStep(executableStep);
+            } else {
+                validateGraphRootResolved(executableStep);
+                result = executeStep(input, executableStep, completedResults);            }
+            System.out.printf(
+                    ">>> STEP RESULT id=[%s] kind=[%s] attrs=%s warnings=%s%n",
+                    step.stepId(),
+                    step.kind(),
+                    result.attributes(),
+                    result.warnings()
             );
 
             observations.add(new Observation(
@@ -113,7 +127,13 @@ public final class DefaultMissionEvidenceService
                     result.attributes()
             ));
 
-            collectedEvidence.addAll(result.evidenceRefs());
+            result.evidenceRefs().forEach(ref -> collectedEvidence.put(ref.evidenceId(), ref));
+
+            if (!result.citations().isEmpty()) {
+                citations = result.citations();
+            }
+
+            verifiedEvidenceIds.addAll(result.verifiedEvidenceIds());
             warnings.addAll(result.warnings());
             completedResults.put(step.stepId(), result);
 
@@ -121,20 +141,81 @@ public final class DefaultMissionEvidenceService
             pending.remove(step);
         }
 
-        EvidenceRegistry registry = new EvidenceRegistry();
-        collectedEvidence.forEach(registry::register);
+        List<EvidenceRef> evidenceRefs = List.copyOf(collectedEvidence.values());
+
+
 
         return new MissionEvidence(
                 observations,
-                registry.snapshot(),
+                evidenceRefs,
+                citations,
+                Set.copyOf(verifiedEvidenceIds),
                 warnings,
-                Map.of()
+                excerptsByEvidenceId(evidenceRefs)
+        );
+
+    }
+
+    private static String excerpt(EvidenceRef ref) {
+        Object value = ref.attributes().get("excerpt");
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private static boolean shouldSkipUnresolvedGraphStep(PlannedStep step) {
+        return isGraphStep(step) && !step.dependencyStepIds().isEmpty() && !hasExecutableGraphRoot(step);
+    }
+
+    private static boolean isGraphStep(PlannedStep step) {
+        return step.kind() == StepKind.READ_INTERNAL_COMPANY_GRAPH || step.kind() == StepKind.READ_LEARNING_GRAPH;
+    }
+
+    private static boolean hasExecutableGraphRoot(PlannedStep step) {
+        Map<String, Object> arguments = step.arguments() == null ? Map.of() : step.arguments();
+
+        if (hasResolvedGraphRoot(arguments)) {
+            return true;
+        }
+
+        Object entityIds = firstPresent(arguments, null, "entityIds", "entity_ids");
+
+        if (!(entityIds instanceof List<?> values) || values.isEmpty()) {
+            return false;
+        }
+
+        Object first = values.getFirst();
+        return first instanceof String entityId && !entityId.isBlank() && !isPlannerReference(entityId);
+    }
+
+    private static StepResult skippedGraphStep(PlannedStep step) {
+        String warning = "Skipped graph step " + step.stepId() + " because its dependency did not resolve a unique graph root.";
+
+        return new StepResult(
+                warning,
+                List.of(),
+                List.of(warning),
+                Map.of(
+                        "capability", step.capability(),
+                        "skipped", true,
+                        "reason", "UNRESOLVED_GRAPH_ROOT"
+                )
+        );
+    }
+
+    private static void validateGraphRootResolved(PlannedStep step) {
+        if (!isGraphStep(step) || hasExecutableGraphRoot(step)) {
+            return;
+        }
+
+        throw new IllegalStateException(
+                "graph step " + step.stepId() + " has no uniquely resolved graph root; its dependency did not produce resolvedEntityId and resolvedNodeType"
         );
     }
 
     private StepResult executeStep(
             MissionRunInput input,
-            PlannedStep step
+            PlannedStep step,
+            Map<String, StepResult> completedResults
+
     ) {
         if (step.requiresHumanApproval()
                 && input.approvedGateIds().isEmpty()) {
@@ -145,31 +226,150 @@ public final class DefaultMissionEvidenceService
         }
 
         return switch (step.kind()) {
-            case BUILD_DOCUMENT_EVIDENCE ->
-                    executeDocument(input, step);
+            case BUILD_DOCUMENT_EVIDENCE -> executeDocument(input, step);
+
+            case VERIFY_DOCUMENT_EVIDENCE -> executeDocumentVerification(input, step, completedResults);
+
+            case BUILD_CITATIONS -> executeCitations(step, completedResults);
+
             case SEARCH_INTERNAL_ENTITIES,
                  READ_INTERNAL_COMPANY_GRAPH,
                  READ_LEARNING_GRAPH -> executeInternal(input, step);
+
             case PREPARE_INPUT_ARTIFACTS,
                  UPLOAD_DOCUMENT,
                  GET_INGESTION_JOB -> deferred(
                     step,
                     "Input artifact preparation completed before agent start"
             );
+
             case REQUEST_HUMAN_APPROVAL -> deferred(
                     step,
                     "Enterprise approval was resolved before agent execution"
             );
+
             case APPLY_REDACTION,
                  CHECK_GROUNDING,
-                 BUILD_CITATIONS,
                  COMPOSE_ANSWER,
-                 SEARCH_DOCUMENT_SPANS,
-                 VERIFY_DOCUMENT_EVIDENCE -> deferred(
+                 SEARCH_DOCUMENT_SPANS -> deferred(
                     step,
                     "Handled by the terminal synthesis/governance boundary"
             );
         };
+    }
+
+    private StepResult executeDocumentVerification(
+            MissionRunInput input,
+            PlannedStep step,
+            Map<String, StepResult> completedResults
+    ) {
+        StepResult dependency = requireDocumentGraphDependency(step, completedResults);
+
+        VerifyEvidenceGraphAction.Result result = verifyEvidenceAction.execute(
+                input.request().context(),
+                new VerifyEvidenceGraphAction.VerificationSpec(
+                        effectId(input, step),
+                        dependency.documentGraph(),
+                        true,
+                        true
+                )
+        );
+
+        List<EvidenceRef> verifiedEvidence = documentEvidenceMapper.fromGraphEvidence(result.verifiedGraph());
+
+        Set<String> verifiedEvidenceIds =
+                result.supported() && result.verificationStatus() == VerificationStatusProto.VERIFICATION_STATUS_SUPPORTED
+                        ? verifiedEvidence.stream().map(EvidenceRef::evidenceId).collect(java.util.stream.Collectors.toUnmodifiableSet())
+                        : Set.of();
+
+        return new StepResult(
+                "Verified document evidence; status=" + result.verificationStatus().name(),
+                verifiedEvidence,
+                result.warnings(),
+                Map.of(
+                        "supported", result.supported(),
+                        "verificationStatus", result.verificationStatus().name(),
+                        "confidence", result.confidence(),
+                        "coverageScore", result.coverageScore(),
+                        "unsupportedNodeIds", result.unsupportedNodeIds(),
+                        "unsupportedEdgeIds", result.unsupportedEdgeIds()
+                ),
+                result.verifiedGraph(),
+                List.of(),
+                verifiedEvidenceIds
+        );
+    }
+
+    private static StepResult requireDocumentGraphDependency(
+            PlannedStep step,
+            Map<String, StepResult> completedResults
+    ) {
+        return step.dependencyStepIds().stream()
+                .map(completedResults::get)
+                .filter(Objects::nonNull)
+                .filter(result -> result.documentGraph() != null)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "step " + step.stepId() + " requires a document evidence graph dependency"
+                ));
+    }
+
+    private StepResult executeCitations(
+            PlannedStep step,
+            Map<String, StepResult> completedResults
+    ) {
+        StepResult dependency = requireEvidenceDependency(step, completedResults);
+
+        Map<String, String> excerpts = excerptsByEvidenceId(dependency.evidenceRefs());
+
+        BuildCitationsAction.Result result = citationsAction.execute(
+                new BuildCitationsAction.BuildSpec(
+                        dependency.evidenceRefs(),
+                        excerpts
+                )
+        );
+
+        return new StepResult(
+                "Built " + result.citations().size() + " citations",
+                result.evidenceRefs(),
+                List.of(),
+                Map.of("citationCount", result.citations().size()),
+                dependency.documentGraph(),
+                result.citations(),
+                dependency.verifiedEvidenceIds()
+        );
+    }
+
+    private static StepResult requireEvidenceDependency(
+            PlannedStep step,
+            Map<String, StepResult> completedResults
+    ) {
+        return step.dependencyStepIds().stream()
+                .map(completedResults::get)
+                .filter(Objects::nonNull)
+                .filter(result -> !result.evidenceRefs().isEmpty())
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "step " + step.stepId() + " requires evidence from a dependency"
+                ));
+    }
+
+    private static Map<String, String> excerptsByEvidenceId(List<EvidenceRef> evidenceRefs) {
+        Map<String, String> result = new LinkedHashMap<>();
+
+        for (EvidenceRef ref : evidenceRefs) {
+            if (ref == null || ref.evidenceId() == null || ref.evidenceId().isBlank()) {
+                continue;
+            }
+
+            Object excerpt = ref.attributes().get("excerpt");
+
+            if (excerpt instanceof String text && !text.isBlank()) {
+                result.put(ref.evidenceId(), text);
+            }
+        }
+
+        return Map.copyOf(result);
     }
 
     private static PlannedStep hydrateDependencyArguments(
@@ -188,18 +388,11 @@ public final class DefaultMissionEvidenceService
                                 : step.arguments()
                 );
 
-        if (hasNonBlankString(
-                arguments,
-                "rootEntityId",
-                "root_entity_id",
-                "entityId",
-                "entity_id"
-        )) {
+        if (hasResolvedGraphRoot(arguments)) {
             return step;
         }
 
-        for (String dependencyStepId
-                : step.dependencyStepIds()) {
+        for (String dependencyStepId : step.dependencyStepIds()) {
 
             StepResult dependencyResult =
                     completedResults.get(dependencyStepId);
@@ -212,31 +405,30 @@ public final class DefaultMissionEvidenceService
                     dependencyResult.attributes()
                             .get("resolvedEntityId");
 
+            Object resolvedNodeType =
+                    dependencyResult.attributes()
+                            .get("resolvedNodeType");
+
             if (!(resolvedEntityId instanceof String entityId)
                     || entityId.isBlank()) {
                 continue;
             }
 
+            if (resolvedNodeType == null) {
+                continue;
+            }
+
+            arguments.put("rootEntityId", entityId);
+            arguments.remove("entityId");
+            arguments.remove("entity_id");
+            arguments.remove("root_entity_id");
+
             arguments.put(
-                    "rootEntityId",
-                    entityId
+                    "rootNodeType",
+                    resolvedNodeType
             );
 
-            Object resolvedNodeType =
-                    dependencyResult.attributes()
-                            .get("resolvedNodeType");
-
-            if (resolvedNodeType != null
-                    && !hasNonBlankString(
-                    arguments,
-                    "rootNodeType",
-                    "root_node_type"
-            )) {
-                arguments.put(
-                        "rootNodeType",
-                        resolvedNodeType
-                );
-            }
+            arguments.remove("root_node_type");
 
             return new PlannedStep(
                     step.stepId(),
@@ -253,6 +445,61 @@ public final class DefaultMissionEvidenceService
         return step;
     }
 
+    private static boolean hasResolvedGraphRoot(
+            Map<String, Object> arguments
+    ) {
+        String entityId = null;
+
+        for (String key : List.of(
+                "rootEntityId",
+                "root_entity_id",
+                "entityId",
+                "entity_id"
+        )) {
+            Object value = arguments.get(key);
+
+            if (value instanceof String text
+                    && !text.isBlank()
+                    && !isPlannerReference(text)) {
+                entityId = text;
+                break;
+            }
+        }
+
+        if (entityId == null) {
+            return false;
+        }
+
+        Object nodeType = firstPresent(
+                arguments,
+                null,
+                "rootNodeType",
+                "root_node_type"
+        );
+
+        if (nodeType == null) {
+            return false;
+        }
+
+        if (nodeType instanceof String text) {
+            return !text.isBlank()
+                    && !isPlannerReference(text);
+        }
+
+        // Allows the actual InternalGraphNodeType enum too.
+        return true;
+    }
+
+    private static boolean isPlannerReference(String value) {
+        String text = value.trim();
+
+        return text.contains("${")
+                || text.contains("{{")
+                || text.contains("}}")
+                || text.startsWith("steps.")
+                || text.contains(".output.");
+    }
+
     private StepResult executeDocument(
             MissionRunInput input,
             PlannedStep step
@@ -263,17 +510,17 @@ public final class DefaultMissionEvidenceService
                 documentStep.execute(input.request().context(), spec);
 
         return new StepResult(
-                "Built document evidence; coverage="
-                        + result.coverageScore(),
+                "Built document evidence; coverage=" + result.coverageScore(),
                 result.evidenceRefs(),
                 result.warnings(),
                 Map.of(
                         "coverageScore", result.coverageScore(),
-                        "usedChunkRetrieval",
-                        result.usedChunkRetrieval(),
-                        "usedClaimCache",
-                        result.usedClaimCache()
-                )
+                        "usedChunkRetrieval", result.usedChunkRetrieval(),
+                        "usedClaimCache", result.usedClaimCache()
+                ),
+                result.graph(),
+                List.of(),
+                Set.of()
         );
     }
 
@@ -321,24 +568,11 @@ public final class DefaultMissionEvidenceService
                 effectId(input, step)
         );
 
-        copyFirstPresent(arguments, spec, "goal", "goal", "evidenceGoal", "evidence_goal");
-        copyFirstPresent(arguments, spec, "customGoal", "customGoal", "custom_goal");
+        spec.put("goal", goal);
+        spec.put("customGoal", customGoal);
+        copyFirstPresent(arguments, spec, "requestedNodeTypes", "requestedNodeTypes", "requested_node_types");
 
-        copyFirstPresent(
-                arguments,
-                spec,
-                "requestedNodeTypes",
-                "requestedNodeTypes",
-                "requested_node_types"
-        );
-
-        copyFirstPresent(
-                arguments,
-                spec,
-                "requestedRelationTypes",
-                "requestedRelationTypes",
-                "requested_relation_types"
-        );
+        copyFirstPresent(arguments, spec, "requestedRelationTypes", "requestedRelationTypes", "requested_relation_types");
 
         copyFirstPresent(
                 arguments,
@@ -363,13 +597,13 @@ public final class DefaultMissionEvidenceService
                 "options"
         );
 
-        copyFirstPresent(
-                arguments,
-                spec,
-                "retrievalHint",
-                "retrievalHint",
-                "retrieval_hint"
-        );
+        String retrievalHint = stringArgument(arguments, "retrievalHint", "retrieval_hint", "query");
+
+        if (retrievalHint.isBlank()) {
+            retrievalHint = step.objective();
+        }
+
+        spec.put("retrievalHint", retrievalHint);
 
         copyFirstPresent(
                 arguments,
@@ -409,18 +643,22 @@ public final class DefaultMissionEvidenceService
                 "debug_task_instruction"
         );
 
-        copyFirstPresent(
+        RetrievalModeProto retrievalMode = enumArgument(
                 arguments,
-                spec,
-                "retrievalMode",
+                RetrievalModeProto.class,
                 "retrievalMode",
                 "retrieval_mode"
         );
 
-        spec.put(
-                "limit",
-                arguments.getOrDefault("limit", 20)
-        );
+        if (retrievalMode == null
+                || retrievalMode == RetrievalModeProto.RETRIEVAL_MODE_UNSPECIFIED
+                || retrievalMode == RetrievalModeProto.UNRECOGNIZED) {
+            retrievalMode = RetrievalModeProto.RETRIEVAL_MODE_HYBRID;
+        }
+
+        spec.put("retrievalMode", retrievalMode);
+
+        spec.put("limit", arguments.getOrDefault("limit", 20));
 
         spec.put(
                 "includeExcerpts",
@@ -452,15 +690,9 @@ public final class DefaultMissionEvidenceService
                 )
         );
 
-        spec.put(
-                "scope",
-                buildDocumentScope(arguments)
-        );
+        spec.put("scope", buildDocumentScope(arguments));
 
-        return objectMapper.convertValue(
-                spec,
-                BuildSpec.class
-        );
+        return objectMapper.convertValue(spec, BuildSpec.class);
     }
 
     private static Scope buildDocumentScope(
@@ -477,31 +709,22 @@ public final class DefaultMissionEvidenceService
                         ? castStringObjectMap(map)
                         : arguments;
 
+        List<String> documentIds = new ArrayList<>(
+                stringList(source, "documentIds", "document_ids")
+        );
+
+        String documentId = stringArgument(source, "documentId", "document_id");
+
+        if (!documentId.isBlank()) {
+            documentIds.add(documentId);
+        }
+
         return new Scope(
-                stringList(
-                        source,
-                        "documentIds",
-                        "document_ids"
-                ),
-                stringList(
-                        source,
-                        "fileNames",
-                        "file_names"
-                ),
-                stringList(
-                        source,
-                        "collectionIds",
-                        "collection_ids"
-                ),
-                stringList(
-                        source,
-                        "tags"
-                ),
-                stringMap(
-                        source,
-                        "metadataFilters",
-                        "metadata_filters"
-                )
+                List.copyOf(documentIds),
+                stringList(source, "fileNames", "file_names"),
+                stringList(source, "collectionIds", "collection_ids"),
+                stringList(source, "tags"),
+                stringMap(source, "metadataFilters", "metadata_filters")
         );
     }
 
@@ -585,19 +808,27 @@ public final class DefaultMissionEvidenceService
             String summary,
             List<EvidenceRef> evidenceRefs,
             List<String> warnings,
-            Map<String, Object> attributes
+            Map<String, Object> attributes,
+            DocumentEvidenceGraphProto documentGraph,
+            List<Citation> citations,
+            Set<String> verifiedEvidenceIds
     ) {
+        private StepResult(
+                String summary,
+                List<EvidenceRef> evidenceRefs,
+                List<String> warnings,
+                Map<String, Object> attributes
+        ) {
+            this(summary, evidenceRefs, warnings, attributes, null, List.of(), Set.of());
+        }
+
         private StepResult {
             summary = summary == null ? "" : summary;
-            evidenceRefs = evidenceRefs == null
-                    ? List.of()
-                    : List.copyOf(evidenceRefs);
-            warnings = warnings == null
-                    ? List.of()
-                    : List.copyOf(warnings);
-            attributes = attributes == null
-                    ? Map.of()
-                    : Map.copyOf(attributes);
+            evidenceRefs = evidenceRefs == null ? List.of() : List.copyOf(evidenceRefs);
+            warnings = warnings == null ? List.of() : List.copyOf(warnings);
+            attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+            citations = citations == null ? List.of() : List.copyOf(citations);
+            verifiedEvidenceIds = verifiedEvidenceIds == null ? Set.of() : Set.copyOf(verifiedEvidenceIds);
         }
     }
 

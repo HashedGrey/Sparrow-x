@@ -29,10 +29,18 @@ public final class DocumentEvidenceMapper {
             throw new IllegalArgumentException("document evidence response must contain a graph");
         }
 
-        DocumentEvidenceGraphProto graph = response.getGraph();
+        return fromGraphEvidence(response.getGraph());
+    }
+
+    public List<EvidenceRef> fromGraphEvidence(DocumentEvidenceGraphProto graph) {
+        if (graph == null || graph.getGraphId().isBlank()) {
+            throw new IllegalArgumentException("graph id must not be blank");
+        }
+
         List<EvidenceRef> evidence = new ArrayList<>();
         evidence.add(fromGraph(graph));
         graph.getSourcePoolList().stream().map(this::fromSpan).forEach(evidence::add);
+
         return deduplicate(evidence);
     }
 
