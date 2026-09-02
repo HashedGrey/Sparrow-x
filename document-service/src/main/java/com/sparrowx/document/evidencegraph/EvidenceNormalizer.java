@@ -118,21 +118,24 @@ public class EvidenceNormalizer {
 
         return sourceSpans.stream()
                 .filter(span -> span != null)
-                .filter(span -> span.excerpt() != null && !span.excerpt().isBlank())
-                .filter(span -> spanMatchesType(type, span.excerpt()))
+                .filter(span ->
+                        span.excerpt() != null
+                                && !span.excerpt().isBlank()
+                )
+                .filter(span ->
+                        spanMatchesType(type, span.excerpt())
+                )
                 .findFirst()
-                .orElseGet(() -> sourceSpans.stream()
-                        .filter(span -> span != null)
-                        .filter(span -> span.excerpt() != null && !span.excerpt().isBlank())
-                        .findFirst()
-                        .orElse(null));
+                .orElse(null);
     }
 
     private boolean spanMatchesType(
             DocumentEvidenceNode.EvidenceNodeType type,
             String excerpt
     ) {
-        String text = excerpt == null ? "" : excerpt.toLowerCase();
+        String text = excerpt == null
+                ? ""
+                : excerpt.toLowerCase(java.util.Locale.ROOT);
 
         return switch (type) {
             case METRIC -> containsAny(
@@ -142,37 +145,31 @@ public class EvidenceNormalizer {
                     "p <",
                     "p >",
                     "r2",
-                    "adj r2",
-                    "variance",
                     "coefficient",
-                    "model",
                     "estimate"
             );
+
             case FRAMEWORK -> containsAny(
                     text,
-                    "regression",
-                    "analysis",
-                    "analyses",
                     "method",
                     "procedure",
-                    "sampling",
+                    "analysis",
                     "model",
-                    "ols",
-                    "multilevel"
+                    "sampling"
             );
+
             case CLAIM -> containsAny(
                     text,
-                    "we stated",
-                    "suggesting",
-                    "suggested",
-                    "in other words",
-                    "evidence for this statement",
-                    "independent influences",
+                    "suggest",
+                    "evidence",
+                    "because",
+                    "therefore",
+                    "relationship",
                     "cause",
-                    "caused",
-                    "relationship"
+                    "caused"
             );
-            case ENTITY -> containsAny(text, "mind-wandering", "happiness", "activity", "participants");
+
+            case ENTITY -> false;
             case OBLIGATION, CUSTOM, UNSPECIFIED -> false;
         };
     }
@@ -271,12 +268,12 @@ public class EvidenceNormalizer {
         if (nodeType == DocumentEvidenceNode.EvidenceNodeType.CLAIM) {
             String claimSentence = firstSentenceContaining(
                     normalized,
-                    "we stated",
                     "suggest",
+                    "evidence",
+                    "because",
+                    "therefore",
                     "relationship",
-                    "cause",
-                    "independent influences",
-                    "in other words"
+                    "cause"
             );
 
             if (!claimSentence.isBlank()) {

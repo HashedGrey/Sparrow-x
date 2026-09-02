@@ -175,41 +175,16 @@ public class EvidenceBuildOrchestrator {
 
         String normalizedClaim = normalize(testedClaim);
 
-        if (isActivityMindWanderingVarianceClaim(normalizedClaim)) {
-            List<SourceSpan> focused = sourcePool.stream()
-                    .filter(span -> span != null)
-                    .filter(span -> isActivityMindWanderingVarianceEvidence(span.excerpt()))
-                    .limit(3)
-                    .toList();
-
-            if (!focused.isEmpty()) {
-                return focused;
-            }
-        }
-
         return sourcePool.stream()
                 .filter(span -> span != null)
-                .filter(span -> overlapsTestedClaim(normalizedClaim, span.excerpt()))
+                .filter(span -> overlapsTestedClaim(
+                        normalizedClaim,
+                        span.excerpt()
+                ))
                 .limit(3)
                 .toList();
     }
 
-    private boolean isActivityMindWanderingVarianceClaim(String value) {
-        return containsAny(value, "activity", "activities")
-                && containsAny(value, "mind wandering", "mind-wandering", "mindwandering")
-                && containsAny(value, "variance", "happiness")
-                && containsAny(value, "more", "greater", "higher", "larger", "less", "lower", "smaller");
-    }
-
-    private boolean isActivityMindWanderingVarianceEvidence(String excerpt) {
-        String value = normalize(excerpt);
-
-        return containsAny(value, "activity", "activities")
-                && containsAny(value, "mind wandering", "mind-wandering", "mindwandering")
-                && value.contains("%")
-                && containsAny(value, "variance", "happiness")
-                && containsAny(value, "explained", "explains");
-    }
 
     private boolean overlapsTestedClaim(
             String normalizedClaim,
@@ -429,26 +404,12 @@ public class EvidenceBuildOrchestrator {
         }
 
         return value
-                .toLowerCase()
-                .replace("mind-wandering", "mind wandering")
-                .replace("mindwandering", "mind wandering")
+                .toLowerCase(java.util.Locale.ROOT)
+                .replace('-', ' ')
                 .replaceAll("\\s+", " ")
                 .trim();
     }
 
-    private boolean containsAny(String value, String... terms) {
-        if (value == null || terms == null) {
-            return false;
-        }
-
-        for (String term : terms) {
-            if (term != null && !term.isBlank() && value.contains(term)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private List<SourceSpan> retrieveSourceSpans(BuildDocumentEvidenceCommand command) {
         SearchQueryText retrievalQuery = SearchQueryText.of(buildRetrievalQuery(command));

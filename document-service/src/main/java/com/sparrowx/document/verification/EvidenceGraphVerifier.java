@@ -11,12 +11,7 @@ import com.sparrowx.document.exceptions.CitationVerificationException;
 import com.sparrowx.document.exceptions.InvalidDocumentException;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Component
 public class EvidenceGraphVerifier {
@@ -58,8 +53,10 @@ public class EvidenceGraphVerifier {
                 continue;
             }
 
-            NodeVerification verification = verifyNode(node, sourcePool);
-
+            NodeVerification verification =
+                    isTestedClaimNode(node)
+                            ? verifyTestedClaimNode(node, graph.edges(), sourcePool)
+                            : verifyNode(node, sourcePool);
             DocumentEvidenceNode verifiedNode = copyNodeWithVerification(
                     node,
                     verification.status(),
@@ -160,6 +157,109 @@ public class EvidenceGraphVerifier {
                 warnings,
                 explanation(supported, graphStatus, unsupportedNodeIds, unsupportedEdgeIds)
         );
+    }
+
+    private NodeVerification verifyTestedClaimNode(
+            DocumentEvidenceNode node,
+            List<DocumentEvidenceEdge> edges,
+            Map<String, SourceSpan> sourcePool
+    ) {
+        List<DocumentEvidenceEdge> incoming = edges == null
+                ? List.of()
+                : edges.stream()
+                .filter(edge -> edge != null)
+                .filter(edge -> node.nodeId().equals(edge.toNodeId()))
+                .toList();
+
+        List<DocumentEvidenceEdge> contradicts = incoming.stream()
+                .filter(edge ->
+                        edge.relationType()
+                                == DocumentEvidenceEdge.EvidenceRelationType.CONTRADICTS
+                )
+                .filter(edge -> hasSourceSupport(edge, sourcePool))
+                .toList();
+
+        if (!contradicts.isEmpty()) {
+            double confidence = contradicts.stream()
+                    .mapToDouble(DocumentEvidenceEdge::confidence)
+                    .max()
+                    .orElse(0.0);
+
+            return new NodeVerification(
+                    VerificationStatus.CONTRADICTED,
+                    confidence,
+                    0.0,
+                    List.of(
+                            "Tested claim is contradicted by source-backed evidence relation(s)."
+                    )
+            );
+        }
+
+        List<DocumentEvidenceEdge> supports = incoming.stream()
+                .filter(edge ->
+                        edge.relationType()
+                                == DocumentEvidenceEdge.EvidenceRelationType.SUPPORTS
+                )
+                .filter(edge -> hasSourceSupport(edge, sourcePool))
+                .toList();
+
+        if (!supports.isEmpty()) {
+            double confidence = supports.stream()
+                    .mapToDouble(DocumentEvidenceEdge::confidence)
+                    .max()
+                    .orElse(0.0);
+
+            return new NodeVerification(
+                    VerificationStatus.SUPPORTED,
+                    confidence,
+                    1.0,
+                    List.of(
+                            "Tested claim is supported by source-backed evidence relation(s)."
+                    )
+            );
+        }
+
+        return new NodeVerification(
+                VerificationStatus.UNVERIFIED,
+                0.0,
+                0.0,
+                List.of(
+                        "Tested claim has no source-backed SUPPORTS or CONTRADICTS relation."
+                )
+        );
+    }
+
+    private boolean hasSourceSupport(
+            DocumentEvidenceEdge edge,
+            Map<String, SourceSpan> sourcePool
+    ) {
+        return edge.sourceSpanIds() != null
+                && edge.sourceSpanIds()
+                .stream()
+                .anyMatch(sourcePool::containsKey);
+    }
+
+    private boolean isTestedClaimNode(DocumentEvidenceNode node) {
+        if (node == null) {
+            return false;
+        }
+
+        if (node.attributes() != null
+                && "tested_claim".equalsIgnoreCase(
+                node.attributes().getOrDefault("role", "")
+        )) {
+            return true;
+        }
+
+        return node.tags() != null
+                && node.tags()
+                .stream()
+                .filter(tag -> tag != null)
+                .map(tag -> tag.toLowerCase(Locale.ROOT))
+                .anyMatch(tag ->
+                        tag.equals("tested-claim")
+                                || tag.equals("contradiction-detection")
+                );
     }
 
     private NodeVerification verifyNode(

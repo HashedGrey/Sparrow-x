@@ -3,7 +3,9 @@ package com.sparrowx.document.evidencegraph;
 import com.sparrowx.document.domain.models.DocumentEvidenceEdge;
 import com.sparrowx.document.domain.models.DocumentEvidenceGraph;
 import com.sparrowx.document.domain.models.DocumentEvidenceNode;
+import com.sparrowx.document.domain.valueobjects.VerificationStatus;
 import com.sparrowx.document.features.builddocumentevidence.BuildDocumentEvidenceCommand;
+import com.sparrowx.document.verification.NumericComparisonEvaluator;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,9 +25,14 @@ public class EvidenceRelationLinker {
 
     private static final int MAX_EDGES = 8;
 
-    private static final Pattern ENTITY_PERCENT_PATTERN = Pattern.compile(
-            "(?i)\\b(activity|activities|mind[-\\s]?wandering)\\b\\s+(?:explained|explains|accounted\\s+for|accounts\\s+for)\\s+([0-9]+(?:\\.[0-9]+)?)\\s*%"
-    );
+
+    private final NumericComparisonEvaluator numericComparisonEvaluator;
+
+    public EvidenceRelationLinker(
+            NumericComparisonEvaluator numericComparisonEvaluator
+    ) {
+        this.numericComparisonEvaluator = numericComparisonEvaluator;
+    }
 
     public LinkResult link(
             BuildDocumentEvidenceCommand command,
@@ -44,7 +51,7 @@ public class EvidenceRelationLinker {
 
             if (!contradictionEdges.isEmpty()) {
                 edges.addAll(contradictionEdges);
-                warnings.add("Built contradiction relation edges from tested claim and cross-node source metrics.");
+                warnings.add("Built source-backed contradiction relation edges from numeric comparison evidence.");
             } else {
                 warnings.add("CONTRADICTION_DETECTION requested but no CONTRADICTS edge could be built.");
             }
@@ -64,7 +71,7 @@ public class EvidenceRelationLinker {
         }
 
         if (relationAllowed(command, DocumentEvidenceEdge.EvidenceRelationType.SUPPORTS)) {
-            warnings.add("Used compact baseline relation linker. Replace with DICE relation projection when adapter is pinned.");
+            warnings.add("Used deterministic baseline relation linking.");
             return new LinkResult(buildCompactBaselineEdges(command, nodes), warnings);
         }
 
@@ -83,52 +90,47 @@ public class EvidenceRelationLinker {
             return List.of();
         }
 
-        String claimText = textOf(testedClaim);
-
-        if (!activityMoreThanMindWanderingClaim(claimText)
-                && !mindWanderingMoreThanActivityClaim(claimText)) {
-            return List.of();
-        }
-
-        List<DocumentEvidenceNode> metricNodes = nodes.stream()
+        List<DocumentEvidenceNode> evidenceNodes = nodes.stream()
                 .filter(node -> node != null)
                 .filter(node -> !node.nodeId().equals(testedClaim.nodeId()))
-                .filter(node -> node.nodeType() == DocumentEvidenceNode.EvidenceNodeType.METRIC)
                 .toList();
 
-        CrossNodeNumericEvidence numericEvidence = extractCrossNodeNumericEvidence(metricNodes);
-
-        if (!numericEvidence.hasBoth()) {
+        if (evidenceNodes.isEmpty()) {
             return List.of();
         }
 
-        boolean contradicted;
+        NumericComparisonEvaluator.Result result =
+                numericComparisonEvaluator.evaluate(
+                                textOf(testedClaim),
+                                evidenceNodes.stream()
+                                        .map(this::textOf)
+                                        .toList()
+                        )
+                        .orElse(null);
 
-        if (activityMoreThanMindWanderingClaim(claimText)) {
-            contradicted = numericEvidence.activityMax() < numericEvidence.mindWanderingMin();
-        } else {
-            contradicted = numericEvidence.mindWanderingMax() < numericEvidence.activityMin();
-        }
-
-        if (!contradicted) {
+        if (result == null
+                || result.status() != VerificationStatus.CONTRADICTED) {
             return List.of();
         }
-
-        List<DocumentEvidenceNode> contradictionEvidenceNodes =
-                numericEvidence.evidenceNodes()
-                        .stream()
-                        .distinct()
-                        .toList();
 
         List<DocumentEvidenceEdge> edges = new ArrayList<>();
 
-        for (DocumentEvidenceNode evidenceNode : contradictionEvidenceNodes) {
+        for (Integer index : result.evidenceIndexes()) {
+            if (index == null
+                    || index < 0
+                    || index >= evidenceNodes.size()) {
+                continue;
+            }
+
+            DocumentEvidenceNode evidenceNode =
+                    evidenceNodes.get(index);
+
             edges.add(edge(
                     evidenceNode,
                     testedClaim,
                     DocumentEvidenceEdge.EvidenceRelationType.CONTRADICTS,
-                    contradictionRationale(evidenceNode, testedClaim, numericEvidence),
-                    0.92,
+                    result.explanation(),
+                    result.confidence(),
                     List.of()
             ));
         }
@@ -136,63 +138,7 @@ public class EvidenceRelationLinker {
         return edges;
     }
 
-    private CrossNodeNumericEvidence extractCrossNodeNumericEvidence(
-            List<DocumentEvidenceNode> metricNodes
-    ) {
-        List<Double> activityValues = new ArrayList<>();
-        List<Double> mindWanderingValues = new ArrayList<>();
-        List<DocumentEvidenceNode> contributingNodes = new ArrayList<>();
 
-        for (DocumentEvidenceNode node : metricNodes) {
-            String text = textOf(node);
-
-            EntityNumericValues values = extractEntityNumericValues(text);
-
-            boolean contributed = false;
-
-            if (!values.activityValues().isEmpty()) {
-                activityValues.addAll(values.activityValues());
-                contributed = true;
-            }
-
-            if (!values.mindWanderingValues().isEmpty()) {
-                mindWanderingValues.addAll(values.mindWanderingValues());
-                contributed = true;
-            }
-
-            if (contributed) {
-                contributingNodes.add(node);
-            }
-        }
-
-        return new CrossNodeNumericEvidence(
-                activityValues,
-                mindWanderingValues,
-                contributingNodes
-        );
-    }
-
-    private EntityNumericValues extractEntityNumericValues(String text) {
-        List<Double> activityValues = new ArrayList<>();
-        List<Double> mindWanderingValues = new ArrayList<>();
-
-        String normalized = normalize(text);
-
-        Matcher matcher = ENTITY_PERCENT_PATTERN.matcher(normalized);
-
-        while (matcher.find()) {
-            String entity = normalizeEntity(matcher.group(1));
-            double value = Double.parseDouble(matcher.group(2));
-
-            if ("mind-wandering".equals(entity)) {
-                mindWanderingValues.add(value);
-            } else {
-                activityValues.add(value);
-            }
-        }
-
-        return new EntityNumericValues(activityValues, mindWanderingValues);
-    }
 
     private List<DocumentEvidenceEdge> buildSemanticSupportEdges(
             BuildDocumentEvidenceCommand command,
@@ -287,7 +233,6 @@ public class EvidenceRelationLinker {
         List<DocumentEvidenceNode> metrics = nodes.stream()
                 .filter(node -> node != null)
                 .filter(node -> node.nodeType() == DocumentEvidenceNode.EvidenceNodeType.METRIC)
-                .filter(this::looksLikeQualifierMetric)
                 .toList();
 
         List<DocumentEvidenceEdge> edges = new ArrayList<>();
@@ -361,45 +306,7 @@ public class EvidenceRelationLinker {
         return requested.contains(relationType);
     }
 
-    private boolean activityMoreThanMindWanderingClaim(String value) {
-        String text = normalize(value);
 
-        int activityIndex = firstIndex(text, "activity", "activities");
-        int mindIndex = firstIndex(text, "mind wandering", "mind-wandering", "mindwandering");
-
-        return activityIndex >= 0
-                && mindIndex >= 0
-                && activityIndex < mindIndex
-                && containsAny(text, "more", "greater", "higher", "larger", "exceeds", "explain more", "explains more", "explained more")
-                && containsAny(text, "variance", "happiness", "explained", "explains");
-    }
-
-    private boolean mindWanderingMoreThanActivityClaim(String value) {
-        String text = normalize(value);
-
-        int activityIndex = firstIndex(text, "activity", "activities");
-        int mindIndex = firstIndex(text, "mind wandering", "mind-wandering", "mindwandering");
-
-        return activityIndex >= 0
-                && mindIndex >= 0
-                && mindIndex < activityIndex
-                && containsAny(text, "more", "greater", "higher", "larger", "exceeds", "explain more", "explains more", "explained more")
-                && containsAny(text, "variance", "happiness", "explained", "explains");
-    }
-
-    private String contradictionRationale(
-            DocumentEvidenceNode evidenceNode,
-            DocumentEvidenceNode testedClaim,
-            CrossNodeNumericEvidence numericEvidence
-    ) {
-        return "Source metrics contradict the tested claim. Tested claim: \"%s\". Activity values=%s; mind-wandering values=%s. Evidence node: \"%s\"."
-                .formatted(
-                        truncate(textOf(testedClaim), 100),
-                        numericEvidence.activityValues(),
-                        numericEvidence.mindWanderingValues(),
-                        truncate(textOf(evidenceNode), 130)
-                );
-    }
 
     private String supportRationale(
             DocumentEvidenceNode metric,
@@ -472,11 +379,6 @@ public class EvidenceRelationLinker {
                 .anyMatch(tag -> tag.equals("tested-claim") || tag.equals("contradiction-detection"));
     }
 
-    private boolean looksLikeQualifierMetric(DocumentEvidenceNode node) {
-        String text = textOf(node);
-
-        return containsAny(text, "variance", "explained", "p <", "p >", "r2", "coefficient", "%", "together", "independent");
-    }
 
     private boolean related(
             DocumentEvidenceNode left,
@@ -615,16 +517,6 @@ public class EvidenceRelationLinker {
         return firstNonBlank(node.normalizedText(), node.summary(), node.title());
     }
 
-    private String normalizeEntity(String value) {
-        String normalized = normalize(value);
-
-        if (normalized.contains("mind")) {
-            return "mind-wandering";
-        }
-
-        return "activity";
-    }
-
     private String firstNonBlank(String... values) {
         if (values == null) {
             return "";
@@ -639,34 +531,6 @@ public class EvidenceRelationLinker {
         return "";
     }
 
-    private int firstIndex(String value, String... terms) {
-        int best = -1;
-
-        for (String term : terms) {
-            int index = value.indexOf(term);
-
-            if (index >= 0 && (best < 0 || index < best)) {
-                best = index;
-            }
-        }
-
-        return best;
-    }
-
-    private boolean containsAny(String value, String... terms) {
-        if (value == null || terms == null) {
-            return false;
-        }
-
-        for (String term : terms) {
-            if (term != null && !term.isBlank() && value.contains(term.toLowerCase(Locale.ROOT))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private String normalize(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -674,8 +538,7 @@ public class EvidenceRelationLinker {
 
         return value
                 .toLowerCase(Locale.ROOT)
-                .replace("mind-wandering", "mind wandering")
-                .replace("mindwandering", "mind wandering")
+                .replace('-', ' ')
                 .replaceAll("\\s+", " ")
                 .trim();
     }
@@ -712,45 +575,4 @@ public class EvidenceRelationLinker {
         }
     }
 
-    private record EntityNumericValues(
-            List<Double> activityValues,
-            List<Double> mindWanderingValues
-    ) {
-        private EntityNumericValues {
-            activityValues = activityValues == null ? List.of() : List.copyOf(activityValues);
-            mindWanderingValues = mindWanderingValues == null ? List.of() : List.copyOf(mindWanderingValues);
-        }
-    }
-
-    private record CrossNodeNumericEvidence(
-            List<Double> activityValues,
-            List<Double> mindWanderingValues,
-            List<DocumentEvidenceNode> evidenceNodes
-    ) {
-        private CrossNodeNumericEvidence {
-            activityValues = activityValues == null ? List.of() : List.copyOf(activityValues);
-            mindWanderingValues = mindWanderingValues == null ? List.of() : List.copyOf(mindWanderingValues);
-            evidenceNodes = evidenceNodes == null ? List.of() : List.copyOf(evidenceNodes);
-        }
-
-        boolean hasBoth() {
-            return !activityValues.isEmpty() && !mindWanderingValues.isEmpty();
-        }
-
-        double activityMin() {
-            return activityValues.stream().mapToDouble(Double::doubleValue).min().orElse(Double.NaN);
-        }
-
-        double activityMax() {
-            return activityValues.stream().mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
-        }
-
-        double mindWanderingMin() {
-            return mindWanderingValues.stream().mapToDouble(Double::doubleValue).min().orElse(Double.NaN);
-        }
-
-        double mindWanderingMax() {
-            return mindWanderingValues.stream().mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
-        }
-    }
 }

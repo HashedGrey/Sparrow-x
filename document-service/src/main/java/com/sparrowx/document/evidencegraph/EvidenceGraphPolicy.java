@@ -21,13 +21,15 @@ public class EvidenceGraphPolicy {
     private static final int MAX_TERMS_IN_WARNING = 8;
 
     private static final Set<String> STOP_WORDS = Set.of(
-            "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-            "has", "have", "having", "in", "into", "is", "it", "its", "of",
-            "on", "or", "that", "the", "their", "this", "to", "used", "using",
-            "was", "were", "with", "show", "shows", "find", "evidence",
-            "study", "linking", "linked", "cause", "causes", "caused",
-            "supports", "support", "contradicts", "contradict", "claim",
-            "whether", "document"
+            "a", "an", "and", "are", "as", "at", "be", "by",
+            "for", "from", "has", "have", "having", "in", "into",
+            "is", "it", "its", "of", "on", "or", "that", "the",
+            "their", "this", "to", "used", "using", "was", "were",
+            "with", "show", "shows", "find", "evidence", "study",
+            "linking", "linked",
+            "supports", "support",
+            "contradicts", "contradict",
+            "claim", "whether", "document"
     );
 
     public PolicyResult evaluate(
@@ -350,9 +352,8 @@ public class EvidenceGraphPolicy {
 
         return value
                 .toLowerCase(Locale.ROOT)
-                .replace("mind-wandering", "mind wandering")
-                .replace("mindwandering", "mind wandering")
-                .replaceAll("[^a-z0-9+\\-\\s]", " ")
+                .replace('-', ' ')
+                .replaceAll("[^a-z0-9+\\s]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
