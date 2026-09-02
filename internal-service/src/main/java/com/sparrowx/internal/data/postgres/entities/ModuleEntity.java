@@ -5,9 +5,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import lombok.Getter;
 
 import java.time.Instant;
 
+@Getter
 @Entity
 @Table(
         name = "modules",
@@ -73,35 +75,4 @@ public class ModuleEntity {
         this.updatedAt = updatedAt;
     }
 
-    public String getModuleId() {
-        return moduleId;
-    }
-
-    public String getTenantId() {
-        return tenantId;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getSlug() {
-        return slug;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public String getOwningTeamId() {
-        return owningTeamId;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
 }

@@ -103,10 +103,12 @@ public class SearchInternalEntitiesQueryHandler
         var results = new ArrayList<InternalEntitySearchResult>();
 
         if (shouldSearch(allowedTypes, TYPE_MODULE)) {
+            String moduleSearchText = removeTypeHint(searchText, "module");
+
             moduleRepository
-                    .searchByTenantIdAndText(query.tenantId(), searchText)
+                    .searchByTenantIdAndText(query.tenantId(), moduleSearchText)
                     .forEach(module ->
-                            results.add(toResult(module, searchText))
+                            results.add(toResult(module, moduleSearchText))
                     );
         }
 
@@ -194,6 +196,20 @@ public class SearchInternalEntitiesQueryHandler
                 ranked,
                 isAmbiguous(ranked),
                 warnings
+        );
+    }
+
+    private String removeTypeHint(String query, String typeHint) {
+        if (isBlank(query)) {
+            return "";
+        }
+
+        return String.join(
+                " ",
+                List.of(normalize(query).split("\\s+"))
+                        .stream()
+                        .filter(token -> !token.equals(typeHint))
+                        .toList()
         );
     }
 
