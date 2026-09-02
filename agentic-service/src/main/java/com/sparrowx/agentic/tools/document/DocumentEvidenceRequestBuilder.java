@@ -104,6 +104,15 @@ public final class DocumentEvidenceRequestBuilder {
             topics = topics == null ? List.of() : List.copyOf(topics);
             entityNames = entityNames == null ? List.of() : List.copyOf(entityNames);
             keywords = keywords == null ? List.of() : List.copyOf(keywords);
+
+            if (retrievalHint.isBlank()
+                    && topics.isEmpty()
+                    && entityNames.isEmpty()
+                    && keywords.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "at least one retrieval signal must be provided"
+                );
+            }
             metadataFilters = metadataFilters == null ? Map.of() : Map.copyOf(metadataFilters);
             debugTaskInstruction = debugTaskInstruction == null ? "" : debugTaskInstruction;
             retrievalMode = Objects.requireNonNull(retrievalMode, "retrievalMode must not be null");

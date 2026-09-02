@@ -14,16 +14,11 @@ import java.util.Set;
 
 public final class StructuredOutputSchemas {
 
-    public static final String MISSION_INTENT =
-            "mission-intent";
-    public static final String MISSION_PLAN =
-            "mission-plan";
-    public static final String OBSERVATION =
-            "observation";
-    public static final String SYNTHESIS =
-            "synthesis";
-    public static final String REVIEW =
-            "review";
+    public static final String MISSION_INTENT = "mission-intent";
+    public static final String MISSION_PLAN = "mission-plan";
+    public static final String OBSERVATION = "observation";
+    public static final String SYNTHESIS = "synthesis";
+    public static final String REVIEW = "review";
 
     private static final Set<String> REQUIRED_SCHEMA_NAMES =
             Set.of(
@@ -38,12 +33,9 @@ public final class StructuredOutputSchemas {
     public StructuredOutputSchemas(
             Map<String, VersionedSchema> schemas) {
 
-        Objects.requireNonNull(
-                schemas,
-                "schemas must not be null");
+        Objects.requireNonNull(schemas, "schemas must not be null");
 
-        Map<String, VersionedSchema> copy =
-                Map.copyOf(schemas);
+        Map<String, VersionedSchema> copy = Map.copyOf(schemas);
 
         if (!copy.keySet().containsAll(
                 REQUIRED_SCHEMA_NAMES)) {

@@ -33,28 +33,17 @@ public final class PromptPack {
             ObjectMapper objectMapper,
             Map<String, PromptDefinition> prompts
     ) {
-        this.objectMapper = Objects.requireNonNull(
-                objectMapper,
-                "objectMapper must not be null"
-        );
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
 
-        Objects.requireNonNull(
-                prompts,
-                "prompts must not be null"
-        );
+        Objects.requireNonNull(prompts, "prompts must not be null");
 
-        Map<String, PromptDefinition> copy =
-                new LinkedHashMap<>();
+        Map<String, PromptDefinition> copy = new LinkedHashMap<>();
 
         prompts.forEach((name, definition) -> {
-            String normalizedName =
-                    requireText(name, "prompt name");
+            String normalizedName = requireText(name, "prompt name");
 
             PromptDefinition required =
-                    Objects.requireNonNull(
-                            definition,
-                            "prompt definition must not be null"
-                    );
+                    Objects.requireNonNull(definition, "prompt definition must not be null");
 
             if (!normalizedName.equals(required.name())) {
                 throw new IllegalArgumentException(
@@ -70,10 +59,7 @@ public final class PromptPack {
         this.prompts = Map.copyOf(copy);
     }
 
-    public RenderedPrompt render(
-            String promptName,
-            Map<String, Object> variables
-    ) {
+    public RenderedPrompt render(String promptName, Map<String, Object> variables) {
         String name = requireText(
                 promptName,
                 "promptName"
@@ -173,31 +159,67 @@ public final class PromptPack {
                 INTENT_PROMPT,
                 new PromptDefinition(
                         INTENT_PROMPT,
-                        "v1",
+                        "v2",
                         """
                         You are the SparrowX mission intent interpreter.
-
-                        Convert the supplied mission request into the
-                        required structured mission-intent output.
-
+        
+                        Convert the supplied mission request into the required
+                        structured mission-intent output.
+        
                         Respect the supplied mission constraints exactly.
                         Do not invent tools, source services, entities,
                         requirements, or permissions that are not supported
                         by the supplied context.
-
+        
                         Select the mission path and requirements needed to
-                        satisfy the user's objective. The response must
-                        conform exactly to the provided structured-output
-                        schema.
+                        satisfy the user's objective.
+        
+                        For source requirements:
+        
+                        - Set requiresDocumentEvidence=true when the objective asks
+                          for facts, explanation, comparison, citation, or grounding
+                          from supplied documents.
+        
+                        - Set requiresInternalContext=true only when satisfying the
+                          objective actually requires SparrowX internal entities,
+                          ownership, company graphs, onboarding data, teams, services,
+                          repositories, or other internal context.
+        
+                        - A request explicitly asking to answer from one supplied or
+                          uploaded document does not require internal context unless
+                          the user separately asks for internal context.
+        
+                        - Do not infer requiresInternalContext merely because internal
+                          tools or internal source services are available.
+        
+                        - Set requiresCitations=true when the user requires citations
+                          or supporting source passages.
+        
+                        - Set requiresVerification=true when the answer must be
+                          grounded against supplied source evidence.
+        
+                        - Set allowsExternalSources=false when the user explicitly
+                          restricts the answer to supplied or internal sources.
+        
+                        The response must conform exactly to the provided
+                        structured-output schema.
                         """,
                         """
                         Interpret the following SparrowX mission context.
-
+        
                         Determine the mission objective, target entities,
                         topics, output requirements, evidence requirements,
                         allowed tools and source services, and any required
                         governance characteristics.
-
+        
+                        Distinguish document evidence requirements from internal
+                        company-context requirements. Do not add internal-context
+                        requirements to a document-only mission unless the user's
+                        objective actually requires internal SparrowX data.
+        
+                        Preserve explicit requirements for citations, verification,
+                        supplied-document grounding, and source restrictions.
+        
                         Return only data conforming to the requested
                         structured-output schema.
                         """,
@@ -212,32 +234,70 @@ public final class PromptPack {
                 PLANNING_PROMPT,
                 new PromptDefinition(
                         PLANNING_PROMPT,
-                        "v1",
+                        "v2",
                         """
                         You are the SparrowX mission planner.
-
+        
                         Produce one executable mission plan from the supplied
                         intent, observations, previous plan state, completed
                         steps, and remaining budgets.
-
+        
                         Use only authorized tools. Respect completed steps,
                         remaining tool-call and LLM-call budgets, and all
                         supplied mission constraints.
-
+        
+                        Use tool arguments according to their semantic contract.
+        
+                        For BUILD_DOCUMENT_EVIDENCE:
+                        - Use retrievalHint or query only to describe the information
+                          that should be retrieved.
+                        - If the user names a specific document, restrict retrieval
+                          using scope.fileNames.
+                        - Use scope.documentIds only when an actual system document ID
+                          is known from mission state or prior tool output.
+                        - Never treat a human-readable document title as a document ID.
+                        - Never encode a document scope only inside retrievalHint or query.
+                        - Preserve explicitly requested document scope.
+                        - Do not broaden a document-specific request to all tenant documents.
+        
+                        For SEARCH_INTERNAL_ENTITIES:
+                        - Use it only when internal entity/context lookup is actually
+                          required by the mission intent.
+                        - Do not add internal searches to document-only requests unless
+                          the supplied intent requires internal context.
+        
+                        For graph reads:
+                        - A graph read requiring a root entity must depend on an
+                          appropriate entity-resolution step unless a resolved root
+                          already exists.
+        
                         Do not invent observations or claim that work has
                         already occurred. The response must conform exactly
                         to the provided structured-output schema.
                         """,
                         """
                         Plan the next SparrowX mission execution state.
-
+        
                         Use the supplied mission intent, current plan when
                         present, prior observations, completed steps,
                         authorized tools, and remaining budgets.
-
+        
                         Produce a coherent ordered plan containing only work
                         still necessary to satisfy the mission.
-
+        
+                        When BUILD_DOCUMENT_EVIDENCE is required, represent
+                        document restrictions structurally. For example, a request
+                        referring to a document named 'Example.pdf' should use:
+        
+                        arguments:
+                          retrievalHint: <what evidence to find>
+                          scope:
+                            fileNames:
+                              - Example.pdf
+        
+                        Do not put 'Example.pdf' into documentIds unless it is
+                        actually a system document ID.
+        
                         Return only data conforming to the requested
                         structured-output schema.
                         """,
