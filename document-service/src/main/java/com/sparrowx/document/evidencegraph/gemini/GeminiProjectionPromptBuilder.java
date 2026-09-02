@@ -111,32 +111,40 @@ public class GeminiProjectionPromptBuilder {
         );
     }
 
-    private String contradictionInstruction(BuildDocumentEvidenceCommand command) {
+    private String contradictionInstruction(
+            BuildDocumentEvidenceCommand command
+    ) {
         if (command == null || command.spec() == null) {
             return "";
         }
 
-        if (command.spec().goal() != DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+        if (command.spec().goal()
+                != DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
             return "";
         }
 
         String targetClaim = targetClaim(command);
 
         return """
-                CONTRADICTION_DETECTION rules:
-                - The tested claim is: "%s"
-                - Do not rewrite the tested claim into a true source claim.
-                - Do not mark the tested claim as supported.
-                - Extract only source-backed facts, metrics, methods, and claims from the source spans.
-                - The tested claim will be inserted separately by the deterministic orchestrator.
-                - Your job is to extract source evidence that can later support or contradict that tested claim.
-                - If the source says activity explains 4.6%% / 3.2%% and mind-wandering explains 10.8%% / 17.7%%, extract those as METRIC nodes exactly.
-                - If the source evidence conflicts with the tested claim, extract the conflicting source metrics without softening them.
-                """.formatted(targetClaim);
+            CONTRADICTION_DETECTION rules:
+            - The tested claim is: "%s"
+            - The tested claim is request input, not source evidence.
+            - Do not rewrite the tested claim into a source-backed claim.
+            - Do not mark the tested claim as supported or contradicted.
+            - Extract only facts, claims, metrics, entities, frameworks, obligations, or custom evidence actually grounded in the supplied source spans.
+            - Preserve quantitative values exactly when they are material to the evidence.
+            - Preserve qualifying language, negation, direction, magnitude, and conditions when they materially affect meaning.
+            - If source evidence conflicts with the tested claim, extract the conflicting evidence without softening or reversing it.
+            - The evidence orchestrator inserts and evaluates the tested claim separately.
+            """.formatted(targetClaim);
     }
 
-    private String targetClaim(BuildDocumentEvidenceCommand command) {
-        if (command == null || command.spec() == null || command.buildContext() == null) {
+    private String targetClaim(
+            BuildDocumentEvidenceCommand command
+    ) {
+        if (command == null
+                || command.spec() == null
+                || command.buildContext() == null) {
             return "";
         }
 
@@ -153,28 +161,34 @@ public class GeminiProjectionPromptBuilder {
             return explicit;
         }
 
-        String retrievalHint = command.buildContext().retrievalHint();
-        String fromClaimMarker = extractAfterMarker(retrievalHint, "claim:");
+        String fromRetrievalHint = extractAfterMarker(
+                command.buildContext().retrievalHint(),
+                "claim:"
+        );
 
-        if (!fromClaimMarker.isBlank()) {
-            return fromClaimMarker;
+        if (!fromRetrievalHint.isBlank()) {
+            return fromRetrievalHint;
         }
 
-        String focus = option(options, "focus");
-        String fromFocus = extractAfterMarker(focus, "claim that");
+        String fromFocus = extractAfterMarker(option(options, "focus"), "claim that");
 
         if (!fromFocus.isBlank()) {
             return fromFocus;
         }
 
-        String debug = command.buildContext().debugTaskInstruction();
-        String fromDebug = extractAfterMarker(debug, "claim that");
+        String fromCustomGoal = extractAfterMarker(
+                command.spec().customGoal(),
+                "claim that"
+        );
 
-        if (!fromDebug.isBlank()) {
-            return fromDebug;
+        if (!fromCustomGoal.isBlank()) {
+            return fromCustomGoal;
         }
 
-        return retrievalHint == null ? "" : retrievalHint;
+        return extractAfterMarker(
+                command.buildContext().debugTaskInstruction(),
+                "claim that"
+        );
     }
 
     private String retryInstruction(boolean retry) {

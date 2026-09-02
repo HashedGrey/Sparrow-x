@@ -16,7 +16,10 @@ public class NoopEvidenceProjectionAdapter implements EvidenceProjectionPort {
     ) {
         return new ProjectionResult(
                 List.of(),
-                List.of("No concrete Embabel/DICE projection adapter wired yet; using heuristic EvidenceNormalizer.")
+                List.of(
+                        "No concrete evidence projection adapter is available; "
+                                + "conservative EvidenceNormalizer fallback may be used."
+                )
         );
     }
 }

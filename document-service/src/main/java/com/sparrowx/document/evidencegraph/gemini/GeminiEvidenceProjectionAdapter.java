@@ -50,6 +50,7 @@ public class GeminiEvidenceProjectionAdapter implements EvidenceProjectionPort {
         this.responseValidator = responseValidator;
     }
 
+
     @Override
     public ProjectionResult project(
             BuildDocumentEvidenceCommand command,
@@ -58,62 +59,71 @@ public class GeminiEvidenceProjectionAdapter implements EvidenceProjectionPort {
         if (sourceSpans == null || sourceSpans.isEmpty()) {
             return new ProjectionResult(
                     List.of(),
-                    List.of("Gemini projection skipped because sourceSpans is empty.")
+                    List.of(
+                            "Gemini projection skipped because sourceSpans is empty."
+                    )
             );
         }
 
         List<String> warnings = new ArrayList<>();
+        List<DocumentEvidenceNode> lastUsableNodes = List.of();
 
-        int attempts = attempts(command);
+        int attempts = Math.max(
+                1,
+                properties.projectionRetryCount() + 1
+        );
 
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
-                ProjectionResult result = tryProject(command, sourceSpans, attempt > 1);
+                ProjectionResult result =
+                        tryProject(
+                                command,
+                                sourceSpans,
+                                attempt > 1
+                        );
+
                 warnings.addAll(result.warnings());
 
-                boolean usable = !result.nodes().isEmpty();
-
-                if (usable && shouldAcceptDespiteMissingTypes(command, result.warnings())) {
-                    return new ProjectionResult(result.nodes(), warnings);
+                if (result.nodes().isEmpty()) {
+                    continue;
                 }
 
-                if (usable && !hasMissingRequestedNodeTypeWarning(result.warnings())) {
-                    return new ProjectionResult(result.nodes(), warnings);
+                lastUsableNodes = result.nodes();
+
+                if (!hasMissingRequestedNodeTypeWarning(
+                        result.warnings()
+                )) {
+                    return new ProjectionResult(
+                            result.nodes(),
+                            warnings
+                    );
                 }
 
             } catch (Exception exception) {
-                warnings.add("Gemini projection attempt %d failed: %s"
-                        .formatted(attempt, exception.getMessage()));
+                warnings.add(
+                        "Gemini projection attempt %d failed: %s"
+                                .formatted(
+                                        attempt,
+                                        exception.getMessage()
+                                )
+                );
             }
+        }
+
+        if (!lastUsableNodes.isEmpty()) {
+            warnings.add(
+                    "Projection produced usable evidence nodes but did not satisfy all requested node types; conservative normalization fallback may supply supported missing types."
+            );
+
+            return new ProjectionResult(
+                    lastUsableNodes,
+                    warnings
+            );
         }
 
         return new ProjectionResult(List.of(), warnings);
     }
 
-    private int attempts(BuildDocumentEvidenceCommand command) {
-        if (command != null
-                && command.spec() != null
-                && command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
-            return 1;
-        }
-
-        return Math.max(1, properties.projectionRetryCount() + 1);
-    }
-
-    private boolean shouldAcceptDespiteMissingTypes(
-            BuildDocumentEvidenceCommand command,
-            List<String> warnings
-    ) {
-        if (command == null || command.spec() == null) {
-            return false;
-        }
-
-        if (command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
-            return true;
-        }
-
-        return !hasMissingRequestedNodeTypeWarning(warnings);
-    }
 
     private ProjectionResult tryProject(
             BuildDocumentEvidenceCommand command,
@@ -271,29 +281,40 @@ public class GeminiEvidenceProjectionAdapter implements EvidenceProjectionPort {
                 .build();
     }
 
-    private String systemInstruction(BuildDocumentEvidenceCommand command) {
+    private String systemInstruction(
+            BuildDocumentEvidenceCommand command
+    ) {
         String contradictionInstruction = "";
 
         if (command != null
                 && command.spec() != null
-                && command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+                && command.spec().goal()
+                == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION) {
+
             contradictionInstruction = """
-                    For contradiction detection, do not answer the user claim directly.
-                    Do not restate the tested claim as a supported source claim.
-                    Only extract source-backed evidence nodes.
-                    The deterministic orchestrator will insert the tested claim separately.
-                    """;
+                For contradiction detection:
+                - Do not answer or adjudicate the tested claim directly.
+                - Do not restate request input as source evidence.
+                - Extract only source-backed evidence nodes.
+                - Preserve semantic polarity, negation, conditions, and material quantitative values.
+                - The evidence graph layer evaluates relations to the tested claim separately.
+                """;
         }
 
         return """
-                You are the Document DICE projection layer inside SparrowX Document Service.
-                You only normalize retrieved document spans into compact typed evidence nodes.
-                You must return valid JSON only.
-                Every claim must be grounded in supplied source spans.
-                Keep normalizedText short and source-near.
-                Do not copy full excerpts.
-                %s
-                """.formatted(contradictionInstruction);
+            You are the document evidence projection layer inside SparrowX Document Service.
+
+            Convert retrieved document spans into compact, typed, source-grounded evidence nodes.
+
+            Rules:
+            - Return valid JSON only.
+            - Every evidence node must be grounded in supplied source spans.
+            - Do not invent facts, entities, values, node types, or source references.
+            - Keep normalizedText concise and close to source meaning.
+            - Do not copy full excerpts.
+            - CUSTOM is a valid node type when required by the evidence schema.
+            %s
+            """.formatted(contradictionInstruction);
     }
 
     private DocumentEvidenceNode.EvidenceNodeType toNodeType(String value) {

@@ -132,17 +132,17 @@ public class EvidenceGraphResponseCompactor {
                 .distinct()
                 .toList();
 
-        List<String> critical = unique.stream()
-                .filter(this::isCriticalDiceWarning)
+        List<String> priority = unique.stream()
+                .filter(this::isPriorityWarning)
                 .toList();
 
         List<String> remaining = unique.stream()
-                .filter(value -> !isCriticalDiceWarning(value))
-                .limit(Math.max(0, MAX_WARNINGS - critical.size()))
+                .filter(value -> !isPriorityWarning(value))
+                .limit(Math.max(0, MAX_WARNINGS - priority.size()))
                 .toList();
 
         List<String> compact = new ArrayList<>();
-        compact.addAll(critical);
+        compact.addAll(priority);
         compact.addAll(remaining);
 
         return compact.stream()
@@ -168,8 +168,12 @@ public class EvidenceGraphResponseCompactor {
                 .toList();
     }
 
-    private boolean isCriticalDiceWarning(String warning) {
-        String value = warning.toLowerCase();
+    private boolean isPriorityWarning(String warning) {
+        if (warning == null || warning.isBlank()) {
+            return false;
+        }
+
+        String value = warning.toLowerCase(java.util.Locale.ROOT);
 
         return value.contains("gemini")
                 || value.contains("projection")
