@@ -137,12 +137,19 @@ public class GrpcExceptionInterceptor implements ServerInterceptor {
             );
         }
 
-        // fallback
         return new StatusWithBody(
-                Status.UNKNOWN
-                        .withDescription(ex.getMessage())
+                Status.INTERNAL
+                        .withDescription(
+                                ex.getMessage() == null
+                                        ? "Internal server error"
+                                        : ex.getMessage()
+                        )
                         .withCause(ex),
-                List.of(ex.getMessage())
+                List.of(
+                        ex.getMessage() == null
+                                ? "Internal server error"
+                                : ex.getMessage()
+                )
         );
     }
 

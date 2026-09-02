@@ -6,8 +6,12 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
-import io.grpc.*;
-
+import io.grpc.ForwardingServerCallListener;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 
 public class GrpcResilienceInterceptor implements ServerInterceptor {
 
@@ -24,21 +28,32 @@ public class GrpcResilienceInterceptor implements ServerInterceptor {
             ServerCallHandler<ReqT, RespT> next
     ) {
         ResiliencePolicy policy =
-                policyResolver.resolve(call.getMethodDescriptor().getFullMethodName());
+                policyResolver.resolve(
+                        call.getMethodDescriptor().getFullMethodName()
+                );
 
-        ServerCall.Listener<ReqT> delegate = next.startCall(call, headers);
+        ServerCall.Listener<ReqT> delegate =
+                next.startCall(call, headers);
 
         return new ForwardingServerCallListener
                 .SimpleForwardingServerCallListener<>(delegate) {
 
             @Override
             public void onMessage(ReqT message) {
-                runGuarded(call, () -> delegate.onMessage(message), policy);
+                runGuarded(
+                        call,
+                        () -> delegate.onMessage(message),
+                        policy
+                );
             }
 
             @Override
             public void onHalfClose() {
-                runGuarded(call, delegate::onHalfClose, policy);
+                runGuarded(
+                        call,
+                        delegate::onHalfClose,
+                        policy
+                );
             }
         };
     }
@@ -53,17 +68,26 @@ public class GrpcResilienceInterceptor implements ServerInterceptor {
 
             RateLimiter rateLimiter = policy.getRateLimiter();
             if (rateLimiter != null) {
-                guarded = RateLimiter.decorateRunnable(rateLimiter, guarded);
+                guarded = RateLimiter.decorateRunnable(
+                        rateLimiter,
+                        guarded
+                );
             }
 
             Bulkhead bulkhead = policy.getBulkhead();
             if (bulkhead != null) {
-                guarded = Bulkhead.decorateRunnable(bulkhead, guarded);
+                guarded = Bulkhead.decorateRunnable(
+                        bulkhead,
+                        guarded
+                );
             }
 
             CircuitBreaker circuitBreaker = policy.getCircuitBreaker();
             if (circuitBreaker != null) {
-                guarded = CircuitBreaker.decorateRunnable(circuitBreaker, guarded);
+                guarded = CircuitBreaker.decorateRunnable(
+                        circuitBreaker,
+                        guarded
+                );
             }
 
             guarded.run();
@@ -84,13 +108,15 @@ public class GrpcResilienceInterceptor implements ServerInterceptor {
                     new Metadata()
             );
 
-        } catch (Exception ex) {
-            call.close(
-                    Status.INTERNAL
-                            .withDescription("Unexpected resilience interceptor failure")
-                            .withCause(ex),
-                    new Metadata()
-            );
+        } catch (RuntimeException ex) {
+            /*
+             * Application/domain exceptions are not resilience failures.
+             *
+             * Re-throw so the outer GrpcExceptionInterceptor can map
+             * BadRequestException, NotFoundException, ConflictException,
+             * etc. to the appropriate gRPC status.
+             */
+            throw ex;
         }
     }
 
@@ -100,7 +126,9 @@ public class GrpcResilienceInterceptor implements ServerInterceptor {
 
     public interface ResiliencePolicy {
         CircuitBreaker getCircuitBreaker();
+
         Bulkhead getBulkhead();
+
         RateLimiter getRateLimiter();
     }
 }
