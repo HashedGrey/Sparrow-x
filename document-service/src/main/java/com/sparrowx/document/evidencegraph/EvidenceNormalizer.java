@@ -19,11 +19,6 @@ public class EvidenceNormalizer {
 
     private static final int DEFAULT_MAX_NODES = 8;
 
-    private final EvidenceProjectionPort projectionPort;
-
-    public EvidenceNormalizer(EvidenceProjectionPort projectionPort) {
-        this.projectionPort = projectionPort;
-    }
 
     public NormalizationResult normalize(
             BuildDocumentEvidenceCommand command,
@@ -38,37 +33,28 @@ public class EvidenceNormalizer {
             );
         }
 
-        EvidenceProjectionPort.ProjectionResult projectionResult =
-                projectionPort.project(command, sourceSpans);
+        List<DocumentEvidenceNode> nodes =
+                sourceSpans.stream()
+                        .limit(normalizeLimit(command))
+                        .map(span -> toNode(
+                                command,
+                                span,
+                                DocumentEvidenceNode.EvidenceNodeType.UNSPECIFIED
+                        ))
+                        .toList();
 
-        warnings.addAll(projectionResult.warnings());
-
-        List<DocumentEvidenceNode> nodes = new ArrayList<>();
-
-        if (projectionResult.nodes() != null && !projectionResult.nodes().isEmpty()) {
-            nodes.addAll(projectionResult.nodes());
-        }
+        warnings.add(
+                "Used grounded source-span nodes without semantic classification."
+        );
 
         List<DocumentEvidenceNode.EvidenceNodeType> missingTypes =
                 missingRequestedTypes(command, nodes);
 
         if (!missingTypes.isEmpty()) {
-            List<DocumentEvidenceNode> deterministicNodes =
-                    deterministicNodesForMissingTypes(command, sourceSpans, missingTypes, remainingNodeBudget(command, nodes));
-
-            if (!deterministicNodes.isEmpty()) {
-                nodes.addAll(deterministicNodes);
-                warnings.add("Added deterministic fallback nodes for missing requested node types: " + missingTypes);
-            }
-        }
-
-        if (nodes.isEmpty()) {
-            nodes.addAll(sourceSpans.stream()
-                    .limit(normalizeLimit(command))
-                    .map(span -> toNode(command, span, defaultNodeType(command)))
-                    .toList());
-
-            warnings.add("Used fallback span-to-node normalization.");
+            warnings.add(
+                    "Requested semantic evidence node types were not inferred by document-service: "
+                            + missingTypes
+            );
         }
 
         nodes = deduplicateNodes(nodes);
@@ -79,100 +65,6 @@ public class EvidenceNormalizer {
         return new NormalizationResult(nodes, warnings);
     }
 
-    private List<DocumentEvidenceNode> deterministicNodesForMissingTypes(
-            BuildDocumentEvidenceCommand command,
-            List<SourceSpan> sourceSpans,
-            List<DocumentEvidenceNode.EvidenceNodeType> missingTypes,
-            int budget
-    ) {
-        if (budget <= 0 || missingTypes.isEmpty()) {
-            return List.of();
-        }
-
-        List<DocumentEvidenceNode> nodes = new ArrayList<>();
-
-        for (DocumentEvidenceNode.EvidenceNodeType type : missingTypes) {
-            if (nodes.size() >= budget) {
-                break;
-            }
-
-            SourceSpan sourceSpan = bestSpanForType(type, sourceSpans);
-
-            if (sourceSpan == null) {
-                continue;
-            }
-
-            nodes.add(toNode(command, sourceSpan, type));
-        }
-
-        return nodes;
-    }
-
-    private SourceSpan bestSpanForType(
-            DocumentEvidenceNode.EvidenceNodeType type,
-            List<SourceSpan> sourceSpans
-    ) {
-        if (sourceSpans == null || sourceSpans.isEmpty()) {
-            return null;
-        }
-
-        return sourceSpans.stream()
-                .filter(span -> span != null)
-                .filter(span ->
-                        span.excerpt() != null
-                                && !span.excerpt().isBlank()
-                )
-                .filter(span ->
-                        spanMatchesType(type, span.excerpt())
-                )
-                .findFirst()
-                .orElse(null);
-    }
-
-    private boolean spanMatchesType(
-            DocumentEvidenceNode.EvidenceNodeType type,
-            String excerpt
-    ) {
-        String text = excerpt == null
-                ? ""
-                : excerpt.toLowerCase(java.util.Locale.ROOT);
-
-        return switch (type) {
-            case METRIC -> containsAny(
-                    text,
-                    "%",
-                    " p ",
-                    "p <",
-                    "p >",
-                    "r2",
-                    "coefficient",
-                    "estimate"
-            );
-
-            case FRAMEWORK -> containsAny(
-                    text,
-                    "method",
-                    "procedure",
-                    "analysis",
-                    "model",
-                    "sampling"
-            );
-
-            case CLAIM -> containsAny(
-                    text,
-                    "suggest",
-                    "evidence",
-                    "because",
-                    "therefore",
-                    "relationship",
-                    "cause",
-                    "caused"
-            );
-
-            case ENTITY -> false;
-            case OBLIGATION, CUSTOM, UNSPECIFIED -> false;
-        };
-    }
 
     private DocumentEvidenceNode toNode(
             BuildDocumentEvidenceCommand command,
@@ -187,19 +79,19 @@ public class EvidenceNormalizer {
                 nodeType == DocumentEvidenceNode.EvidenceNodeType.CUSTOM ? "custom_evidence" : "",
                 titleFor(nodeType, span),
                 summarize(excerpt),
-                normalizedTextFor(nodeType, excerpt),
+                truncate(normalizeWhitespace(excerpt), 260),
                 List.of(span.sourceSpanId()),
                 VerificationStatus.UNVERIFIED,
                 bounded(span.relevanceScore()),
                 excerpt.isBlank() ? 0.0 : 1.0,
                 excerpt.isBlank(),
                 buildTags(command, nodeType),
-                List.of("Deterministic fallback evidence node."),
+                List.of("Grounded source-span fallback node; semantic type not inferred."),
                 Map.of(
                         "document_id", span.documentId() == null ? "" : span.documentId().value(),
                         "chunk_id", span.chunkId() == null ? "" : span.chunkId().value(),
                         "citation", span.citation(),
-                        "normalization_source", "deterministic_fallback"
+                        "normalization_source", "source_span_fallback"
                 )
         );
     }
@@ -221,88 +113,9 @@ public class EvidenceNormalizer {
         };
     }
 
-    private String normalizedTextFor(
-            DocumentEvidenceNode.EvidenceNodeType nodeType,
-            String excerpt
-    ) {
-        String normalized = normalizeWhitespace(excerpt);
 
-        if (normalized.isBlank()) {
-            return "";
-        }
 
-        if (nodeType == DocumentEvidenceNode.EvidenceNodeType.METRIC) {
-            String metricSentence = firstSentenceContaining(
-                    normalized,
-                    "%",
-                    "variance",
-                    "p <",
-                    "p >",
-                    "r2",
-                    "coefficient"
-            );
 
-            if (!metricSentence.isBlank()) {
-                return truncate(metricSentence, 260);
-            }
-        }
-
-        if (nodeType == DocumentEvidenceNode.EvidenceNodeType.FRAMEWORK) {
-            String frameworkSentence = firstSentenceContaining(
-                    normalized,
-                    "regression",
-                    "analysis",
-                    "analyses",
-                    "method",
-                    "sampling",
-                    "model",
-                    "ols",
-                    "multilevel"
-            );
-
-            if (!frameworkSentence.isBlank()) {
-                return truncate(frameworkSentence, 260);
-            }
-        }
-
-        if (nodeType == DocumentEvidenceNode.EvidenceNodeType.CLAIM) {
-            String claimSentence = firstSentenceContaining(
-                    normalized,
-                    "suggest",
-                    "evidence",
-                    "because",
-                    "therefore",
-                    "relationship",
-                    "cause"
-            );
-
-            if (!claimSentence.isBlank()) {
-                return truncate(claimSentence, 260);
-            }
-        }
-
-        return truncate(normalized, 260);
-    }
-
-    private String firstSentenceContaining(String text, String... terms) {
-        if (text == null || text.isBlank()) {
-            return "";
-        }
-
-        String[] sentences = text.split("(?<=[.!?])\\s+");
-
-        for (String sentence : sentences) {
-            String lower = sentence.toLowerCase();
-
-            for (String term : terms) {
-                if (term != null && !term.isBlank() && lower.contains(term.toLowerCase())) {
-                    return sentence.trim();
-                }
-            }
-        }
-
-        return "";
-    }
 
     private List<DocumentEvidenceNode.EvidenceNodeType> missingRequestedTypes(
             BuildDocumentEvidenceCommand command,
@@ -339,15 +152,7 @@ public class EvidenceNormalizer {
         return requested.stream().toList();
     }
 
-    private int remainingNodeBudget(
-            BuildDocumentEvidenceCommand command,
-            List<DocumentEvidenceNode> nodes
-    ) {
-        int limit = normalizeLimit(command);
-        int current = nodes == null ? 0 : nodes.size();
 
-        return Math.max(0, limit - current);
-    }
 
     private int normalizeLimit(BuildDocumentEvidenceCommand command) {
         if (command == null || command.limit() <= 0) {
@@ -379,20 +184,6 @@ public class EvidenceNormalizer {
         }
 
         return new ArrayList<>(deduplicated.values());
-    }
-
-    private DocumentEvidenceNode.EvidenceNodeType defaultNodeType(
-            BuildDocumentEvidenceCommand command
-    ) {
-        if (command == null || command.spec() == null) {
-            return DocumentEvidenceNode.EvidenceNodeType.CLAIM;
-        }
-
-        return command.spec().requestedNodeTypes()
-                .stream()
-                .filter(type -> type != null && type != DocumentEvidenceNode.EvidenceNodeType.UNSPECIFIED)
-                .findFirst()
-                .orElse(DocumentEvidenceNode.EvidenceNodeType.CLAIM);
     }
 
     private List<String> buildTags(
@@ -455,20 +246,6 @@ public class EvidenceNormalizer {
         }
 
         return "";
-    }
-
-    private boolean containsAny(String value, String... terms) {
-        if (value == null || terms == null) {
-            return false;
-        }
-
-        for (String term : terms) {
-            if (term != null && !term.isBlank() && value.contains(term.toLowerCase())) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private double bounded(double value) {

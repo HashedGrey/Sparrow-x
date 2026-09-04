@@ -42,7 +42,6 @@ public class EvidenceGraphVerifier {
         double confidenceSum = 0.0;
         int confidenceCount = 0;
         int supportedNodeCount = 0;
-        int contradictedNodeCount = 0;
 
         for (DocumentEvidenceNode node : graph.nodes()) {
             if (node == null) {
@@ -54,9 +53,8 @@ public class EvidenceGraphVerifier {
             }
 
             NodeVerification verification =
-                    isTestedClaimNode(node)
-                            ? verifyTestedClaimNode(node, graph.edges(), sourcePool)
-                            : verifyNode(node, sourcePool);
+                    verifyNode(node, sourcePool);
+
             DocumentEvidenceNode verifiedNode = copyNodeWithVerification(
                     node,
                     verification.status(),
@@ -79,10 +77,6 @@ public class EvidenceGraphVerifier {
             } else {
                 unsupportedNodeIds.add(nodeId);
                 unsupportedNodeIdSet.add(nodeId);
-            }
-
-            if (verification.status() == VerificationStatus.CONTRADICTED) {
-                contradictedNodeCount++;
             }
         }
 
@@ -118,16 +112,16 @@ public class EvidenceGraphVerifier {
         VerificationStatus graphStatus = graphStatus(
                 graph.nodes().size(),
                 supportedNodeCount,
-                contradictedNodeCount,
                 unsupportedNodeIds,
                 unsupportedEdgeIds
         );
 
         boolean supported =
                 isSupportedStatus(graphStatus)
-                        && graphStatus != VerificationStatus.CONTRADICTED
-                        && (!requireAllNodesSupported || unsupportedNodeIds.isEmpty())
-                        && (!requireAllEdgesSupported || unsupportedEdgeIds.isEmpty());
+                        && (!requireAllNodesSupported
+                        || unsupportedNodeIds.isEmpty())
+                        && (!requireAllEdgesSupported
+                        || unsupportedEdgeIds.isEmpty());
 
         DocumentEvidenceGraph verifiedGraph = new DocumentEvidenceGraph(
                 graph.graphId(),
@@ -157,109 +151,6 @@ public class EvidenceGraphVerifier {
                 warnings,
                 explanation(supported, graphStatus, unsupportedNodeIds, unsupportedEdgeIds)
         );
-    }
-
-    private NodeVerification verifyTestedClaimNode(
-            DocumentEvidenceNode node,
-            List<DocumentEvidenceEdge> edges,
-            Map<String, SourceSpan> sourcePool
-    ) {
-        List<DocumentEvidenceEdge> incoming = edges == null
-                ? List.of()
-                : edges.stream()
-                .filter(edge -> edge != null)
-                .filter(edge -> node.nodeId().equals(edge.toNodeId()))
-                .toList();
-
-        List<DocumentEvidenceEdge> contradicts = incoming.stream()
-                .filter(edge ->
-                        edge.relationType()
-                                == DocumentEvidenceEdge.EvidenceRelationType.CONTRADICTS
-                )
-                .filter(edge -> hasSourceSupport(edge, sourcePool))
-                .toList();
-
-        if (!contradicts.isEmpty()) {
-            double confidence = contradicts.stream()
-                    .mapToDouble(DocumentEvidenceEdge::confidence)
-                    .max()
-                    .orElse(0.0);
-
-            return new NodeVerification(
-                    VerificationStatus.CONTRADICTED,
-                    confidence,
-                    0.0,
-                    List.of(
-                            "Tested claim is contradicted by source-backed evidence relation(s)."
-                    )
-            );
-        }
-
-        List<DocumentEvidenceEdge> supports = incoming.stream()
-                .filter(edge ->
-                        edge.relationType()
-                                == DocumentEvidenceEdge.EvidenceRelationType.SUPPORTS
-                )
-                .filter(edge -> hasSourceSupport(edge, sourcePool))
-                .toList();
-
-        if (!supports.isEmpty()) {
-            double confidence = supports.stream()
-                    .mapToDouble(DocumentEvidenceEdge::confidence)
-                    .max()
-                    .orElse(0.0);
-
-            return new NodeVerification(
-                    VerificationStatus.SUPPORTED,
-                    confidence,
-                    1.0,
-                    List.of(
-                            "Tested claim is supported by source-backed evidence relation(s)."
-                    )
-            );
-        }
-
-        return new NodeVerification(
-                VerificationStatus.UNVERIFIED,
-                0.0,
-                0.0,
-                List.of(
-                        "Tested claim has no source-backed SUPPORTS or CONTRADICTS relation."
-                )
-        );
-    }
-
-    private boolean hasSourceSupport(
-            DocumentEvidenceEdge edge,
-            Map<String, SourceSpan> sourcePool
-    ) {
-        return edge.sourceSpanIds() != null
-                && edge.sourceSpanIds()
-                .stream()
-                .anyMatch(sourcePool::containsKey);
-    }
-
-    private boolean isTestedClaimNode(DocumentEvidenceNode node) {
-        if (node == null) {
-            return false;
-        }
-
-        if (node.attributes() != null
-                && "tested_claim".equalsIgnoreCase(
-                node.attributes().getOrDefault("role", "")
-        )) {
-            return true;
-        }
-
-        return node.tags() != null
-                && node.tags()
-                .stream()
-                .filter(tag -> tag != null)
-                .map(tag -> tag.toLowerCase(Locale.ROOT))
-                .anyMatch(tag ->
-                        tag.equals("tested-claim")
-                                || tag.equals("contradiction-detection")
-                );
     }
 
     private NodeVerification verifyNode(
@@ -353,19 +244,16 @@ public class EvidenceGraphVerifier {
         boolean endpointsKnown =
                 fromStatus != null && toStatus != null;
 
-        boolean endpointsSupported;
-
-        if (edge.relationType() == DocumentEvidenceEdge.EvidenceRelationType.CONTRADICTS) {
-            endpointsSupported = endpointsKnown
-                    && !isHardMissingStatus(fromStatus)
-                    && !isHardMissingStatus(toStatus);
-        } else {
-            endpointsSupported = endpointsKnown
-                    && isSupportedStatus(fromStatus)
-                    && isSupportedStatus(toStatus)
-                    && !unsupportedNodeIds.contains(edge.fromNodeId())
-                    && !unsupportedNodeIds.contains(edge.toNodeId());
-        }
+        boolean endpointsSupported =
+                endpointsKnown
+                        && isSupportedStatus(fromStatus)
+                        && isSupportedStatus(toStatus)
+                        && !unsupportedNodeIds.contains(
+                        edge.fromNodeId()
+                )
+                        && !unsupportedNodeIds.contains(
+                        edge.toNodeId()
+                );
 
         boolean hasSourceSupport =
                 edge.sourceSpanIds() != null
@@ -459,7 +347,6 @@ public class EvidenceGraphVerifier {
     private VerificationStatus graphStatus(
             int totalNodes,
             int supportedNodeCount,
-            int contradictedNodeCount,
             List<String> unsupportedNodeIds,
             List<String> unsupportedEdgeIds
     ) {
@@ -467,11 +354,8 @@ public class EvidenceGraphVerifier {
             return VerificationStatus.UNSUPPORTED;
         }
 
-        if (contradictedNodeCount > 0) {
-            return VerificationStatus.CONTRADICTED;
-        }
-
-        if (unsupportedNodeIds.isEmpty() && unsupportedEdgeIds.isEmpty()) {
+        if (unsupportedNodeIds.isEmpty()
+                && unsupportedEdgeIds.isEmpty()) {
             return VerificationStatus.SUPPORTED;
         }
 
@@ -487,22 +371,12 @@ public class EvidenceGraphVerifier {
                 || status == VerificationStatus.PARTIALLY_SUPPORTED;
     }
 
-    private boolean isHardMissingStatus(VerificationStatus status) {
-        return status == VerificationStatus.UNSPECIFIED
-                || status == VerificationStatus.UNVERIFIED
-                || status == VerificationStatus.NEEDS_SOURCE_CONTEXT;
-    }
-
     private String explanation(
             boolean supported,
             VerificationStatus status,
             List<String> unsupportedNodeIds,
             List<String> unsupportedEdgeIds
     ) {
-        if (status == VerificationStatus.CONTRADICTED) {
-            return "Evidence graph is contradicted by the supplied source pool. contradictedOrUnsupportedNodes=%s unsupportedEdges=%s"
-                    .formatted(unsupportedNodeIds, unsupportedEdgeIds);
-        }
 
         if (supported) {
             return "Evidence graph is supported by the supplied source pool.";

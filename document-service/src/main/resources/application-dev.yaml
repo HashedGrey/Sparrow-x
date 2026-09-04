@@ -62,17 +62,6 @@ sparrowx:
       collection-name: sparrowx_document_chunks
       vector-dimension: 768
 
-    llm:
-      provider: gemini
-      model: gemini-3.5-flash
-      api-key: ${GEMINI_API_KEY}
-      max-output-tokens: 8192
-      temperature: 0.0
-      top-p: 0.95
-      projection-retry-count: 1
-      max-projection-spans: 6
-      max-excerpt-chars: 1200
-      json-repair-enabled: true
 
     embedding:
       provider: gemini

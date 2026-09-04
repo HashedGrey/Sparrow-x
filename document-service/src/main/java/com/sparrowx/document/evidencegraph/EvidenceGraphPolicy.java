@@ -69,10 +69,6 @@ public class EvidenceGraphPolicy {
             warnings.add("Evidence graph verification status needs source context.");
         }
 
-        if (graph.verificationStatus() == VerificationStatus.CONTRADICTED) {
-            warnings.add("Evidence graph verification status is contradicted.");
-        }
-
         for (DocumentEvidenceNode node : graph.nodes()) {
             if (node == null) {
                 warnings.add("Graph contains null node.");
@@ -91,40 +87,27 @@ public class EvidenceGraphPolicy {
                 warnings.add("Node %s is unsupported.".formatted(node.nodeId()));
             }
 
-            if (node.verificationStatus() == VerificationStatus.CONTRADICTED) {
-                warnings.add("Node %s is contradicted.".formatted(node.nodeId()));
-            }
-
             if (node.verificationStatus() == VerificationStatus.NEEDS_SOURCE_CONTEXT) {
                 warnings.add("Node %s needs source context.".formatted(node.nodeId()));
             }
         }
 
         if (!graph.missingNodeTypes().isEmpty()) {
-            warnings.add("Evidence graph is missing requested node types: " + graph.missingNodeTypes());
+            warnings.add(
+                    "Requested semantic node types were not produced by document-service: "
+                            + graph.missingNodeTypes()
+            );
         }
 
         IntentRelevanceResult intentRelevance = evaluateIntentRelevance(command, graph);
         warnings.addAll(intentRelevance.warnings());
 
-        boolean contradictionGoal =
-                command.spec().goal() == DocumentEvidenceGraph.EvidenceGoal.CONTRADICTION_DETECTION;
-
-        boolean acceptableVerificationStatus;
-
-        if (contradictionGoal) {
-            acceptableVerificationStatus =
-                    graph.verificationStatus() != VerificationStatus.UNSUPPORTED
-                            && graph.verificationStatus() != VerificationStatus.NEEDS_SOURCE_CONTEXT;
-        } else {
-            acceptableVerificationStatus =
-                    graph.verificationStatus() != VerificationStatus.UNSUPPORTED
-                            && graph.verificationStatus() != VerificationStatus.NEEDS_SOURCE_CONTEXT
-                            && graph.verificationStatus() != VerificationStatus.CONTRADICTED;
-        }
+        boolean acceptableVerificationStatus =
+                graph.verificationStatus() != VerificationStatus.UNSUPPORTED
+                        && graph.verificationStatus()
+                        != VerificationStatus.NEEDS_SOURCE_CONTEXT;
 
         boolean acceptable = !graph.nodes().isEmpty()
-                && graph.missingNodeTypes().isEmpty()
                 && acceptableVerificationStatus
                 && intentRelevance.acceptable();
 
@@ -137,7 +120,7 @@ public class EvidenceGraphPolicy {
     ) {
         List<String> warnings = new ArrayList<>();
 
-        if (command == null || command.buildContext() == null || command.spec() == null) {
+        if (command == null || command.buildContext() == null) {
             warnings.add("No command context was available for evidence relevance checking.");
             return new IntentRelevanceResult(false, 0.0, List.of(), List.of(), warnings);
         }
@@ -193,29 +176,41 @@ public class EvidenceGraphPolicy {
         );
     }
 
-    private Set<String> buildIntentTerms(BuildDocumentEvidenceCommand command) {
+    private Set<String> buildIntentTerms(
+            BuildDocumentEvidenceCommand command
+    ) {
         Set<String> terms = new LinkedHashSet<>();
 
-        if (command == null || command.buildContext() == null || command.spec() == null) {
+        if (command == null || command.buildContext() == null) {
             return terms;
         }
 
-        addStructuredTerms(terms, command.buildContext().topics());
-        addStructuredTerms(terms, command.buildContext().entityNames());
-        addStructuredTerms(terms, command.buildContext().keywords());
+        /*
+         * Retrieval relevance is determined exclusively from the explicit
+         * retrieval context supplied by the caller.
+         *
+         * Evidence spec options describe requested output/consumer intent and
+         * must not be parsed as semantic instructions by document-service.
+         */
+        addStructuredTerms(
+                terms,
+                command.buildContext().topics()
+        );
 
-        addStructuredTerm(terms, command.buildContext().retrievalHint());
-        addStructuredTerm(terms, command.spec().customGoal());
+        addStructuredTerms(
+                terms,
+                command.buildContext().entityNames()
+        );
 
-        Map<String, String> options = command.spec().options();
+        addStructuredTerms(
+                terms,
+                command.buildContext().keywords()
+        );
 
-        if (options != null) {
-            addStructuredTerm(terms, options.get("focus"));
-            addStructuredTerm(terms, options.get("target_claim"));
-            addStructuredTerm(terms, options.get("tested_claim"));
-            addStructuredTerm(terms, options.get("claim"));
-            addStructuredTerm(terms, options.get("proposition"));
-        }
+        addStructuredTerm(
+                terms,
+                command.buildContext().retrievalHint()
+        );
 
         return terms;
     }
