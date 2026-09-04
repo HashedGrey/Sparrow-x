@@ -2,17 +2,17 @@
 
 ## Overview
 
-The Document Service provides document ingestion, storage, retrieval, evidence construction, and citation verification for SparrowX.
+The Document Service provides document ingestion, storage, retrieval, evidence construction, grounding verification, and citation verification for SparrowX.
 
-It owns the unstructured knowledge pipeline used by Agentic Service to retrieve grounded evidence from company documents.
+It owns the unstructured knowledge pipeline used by Agentic Service to ingest company documents, retrieve grounded source spans, construct provenance-aware evidence, and verify citations.
 
-The service supports document upload, asynchronous ingestion, hybrid search, evidence graph construction, evidence verification, and source-level citations.
+Document Service owns document grounding and retrieval mechanics. Agentic Service owns mission-level semantic reasoning over that evidence, including interpretation, support/contradiction judgments, and final synthesis.
 
 ## Implementation Progress
 
 🟩 **Document upload and persistence** ██████████ **100%**
 
-🟩 **Document extraction and chunking** █████████░ **98%**
+🟩 **Document ingestion and chunking** █████████░ **98%**
 
 🟩 **Embedding and indexing pipeline** █████████░ **98%**
 
@@ -20,9 +20,9 @@ The service supports document upload, asynchronous ingestion, hybrid search, evi
 
 🟩 **Access and permission filtering** █████████░ **98%**
 
-🟩 **Evidence graph construction** █████████░ **85%**
+🟩 **Evidence graph construction** █████████░ **98%**
 
-🟩 **Citation and evidence verification** █████████░ **98%**
+🟩 **Citation and grounding verification** █████████░ **98%**
 
 🟩 **Ingestion recovery and workers** █████████░ **98%**
 
@@ -38,27 +38,47 @@ Overall                         🟩 █████████░ 98%
 
 Uploaded documents are persisted and processed through the ingestion pipeline.
 
-Supported processing includes:
+Document parsing and chunking are handled through Embabel Agent RAG.
+
+The ingestion layer provides:
 
 * document validation
 * object storage
-* text extraction
-* token-aware chunking
+* Embabel hierarchical document parsing
+* Apache Tika-backed content extraction
+* page-aware PDF ingestion
+* overlapping content chunking
 * embedding generation
 * keyword indexing
 * vector indexing
 * ingestion status tracking
 * failure recovery
 
-Supported extractors include:
+The Embabel content chunker currently uses:
 
-* PDF
-* DOCX
-* XLSX
-* Apache Tika-compatible formats
-* OCR-backed documents
+```text
+Maximum chunk size    1500
+Chunk overlap          200
+Embedding batch size   100
+```
 
-The ingestion pipeline separates processing into explicit stages so failures can be recovered without rebuilding unrelated document state.
+The ingestion pipeline retains explicit lifecycle stages for status tracking, persistence, metrics, indexing, and recovery.
+
+Document parsing and chunking are performed together through the Embabel RAG ingestion adapter while the existing pipeline lifecycle remains visible to callers and observability infrastructure.
+
+```text
+Object Storage
+     ↓
+Embabel RAG Ingestion
+     ↓
+Hierarchical Parsing
+     ↓
+Content Chunking
+     ↓
+Persist Chunks
+     ↓
+Keyword + Vector Indexing
+```
 
 ## Storage and Indexing
 
@@ -80,7 +100,9 @@ Qdrant
   → vector retrieval
 ```
 
-Indexing supports dual publication to keyword and vector search infrastructure.
+Indexing supports publication to both keyword and vector search infrastructure.
+
+Qdrant indexing uses request-local payload state so concurrent indexing operations remain isolated.
 
 ## Retrieval
 
@@ -110,37 +132,135 @@ Vector Search ───┘
                        ↓
                 Permission Filter
                        ↓
-                 Retrieval Evidence
+                  Source Spans
+                       ↓
+              Retrieval Evidence
 ```
+
+Retrieval remains responsible for locating relevant document content and returning grounded source material. It does not perform mission-level reasoning over that content.
 
 ## Evidence Graph
 
-Retrieved document evidence can be transformed into a structured evidence graph.
+Retrieved document evidence can be organized into a grounded evidence graph.
 
 The evidence layer contains:
 
-* evidence normalization
+* grounded source-span normalization
 * schema validation
-* relation linking
+* grounded relation linking
 * graph construction
 * policy enforcement
 * response compaction
-* projection adapters
 
-Evidence graphs provide structured provenance between claims, source spans, and supporting document content.
+Document Service keeps evidence construction grounded in retrieved document content.
+
+Evidence nodes are derived from registered source spans and preserve provenance back to originating chunks and documents.
+
+Document Service does not infer semantic evidence types merely to satisfy requested node classifications. When semantic types cannot be established directly from grounded document evidence, nodes may remain semantically unspecified.
+
+Likewise, mission-level judgments such as whether evidence supports or contradicts a user's proposition belong to Agentic Service.
+
+```text
+Source Spans
+     ↓
+Grounded Normalization
+     ↓
+Evidence Nodes
+     ↓
+Grounded Relation Linking
+     ↓
+Schema Validation
+     ↓
+Policy Enforcement
+     ↓
+Document Evidence Graph
+```
+
+Evidence graphs provide structured provenance between:
+
+* evidence nodes
+* evidence relations
+* source spans
+* document chunks
+* originating documents
 
 ## Evidence Verification
 
-The service verifies evidence before it is consumed as grounded context.
+The service verifies that evidence is grounded in registered document sources before it is consumed by Agentic Service.
 
 Verification includes:
 
 * source-span validation
 * citation verification
-* evidence graph validation
+* evidence graph structural validation
+* grounding/support verification
 * verification status tracking
 
-This allows Agentic Service to synthesize answers from registered, traceable evidence rather than raw retrieval results.
+Verification establishes that returned evidence is traceable to document content.
+
+It does not perform mission-level entailment reasoning or determine whether a user's proposition is ultimately supported or contradicted.
+
+That responsibility belongs to Agentic Service.
+
+```text
+Document Evidence
+      ↓
+Source Validation
+      ↓
+Citation Validation
+      ↓
+Graph Validation
+      ↓
+Grounding Verification
+      ↓
+Verified Evidence
+      ↓
+Agentic Service Reasoning
+```
+
+## Service Boundary
+
+The Document Service intentionally stops at grounded evidence.
+
+```text
+Document Service
+
+ingest
+  ↓
+parse
+  ↓
+chunk
+  ↓
+index
+  ↓
+retrieve
+  ↓
+ground
+  ↓
+construct provenance
+  ↓
+verify sources and citations
+```
+
+Agentic Service consumes that evidence and performs higher-level reasoning:
+
+```text
+Agentic Service
+
+interpret evidence
+  ↓
+classify semantics
+  ↓
+compare evidence
+  ↓
+judge support / contradiction
+  ↓
+reason across sources
+  ↓
+synthesize grounded answer
+```
+
+This boundary keeps document retrieval deterministic and provenance-focused while allowing Agentic Service to perform mission-specific reasoning.
 
 ## Service API
 
@@ -169,7 +289,18 @@ The document domain includes:
 * `DocumentEvidenceNode`
 * `DocumentEvidenceEdge`
 
-Strong value objects are used for document IDs, tenant IDs, user IDs, hashes, titles, MIME types, retrieval modes, and verification state.
+Strong value objects are used for:
+
+* document IDs
+* tenant IDs
+* user IDs
+* project IDs
+* team IDs
+* content hashes
+* titles
+* MIME types
+* retrieval modes
+* verification state
 
 ## Security and Isolation
 
@@ -177,7 +308,13 @@ Retrieval applies contextual access and permission checks before evidence is ret
 
 The service maintains tenant-aware document boundaries and propagates caller identity through the request pipeline.
 
-gRPC policy enforcement provides an additional transport-level governance boundary.
+Security boundaries include:
+
+* tenant-scoped document access
+* contextual retrieval filtering
+* permission filtering
+* caller identity propagation
+* gRPC transport-level policy enforcement
 
 ## Observability
 
@@ -190,26 +327,30 @@ Dedicated lifecycle logging exists for:
 * evidence verification
 * citation verification
 
-This makes ingestion and retrieval failures traceable independently from Agentic Service orchestration.
+This makes ingestion, indexing, retrieval, and grounding failures independently traceable from Agentic Service orchestration.
 
 ## Technology
 
 The service uses:
 
-* Java 24+
+* Java 25
 * Spring Boot
+* Spring AI
 * gRPC
 * PostgreSQL
 * MinIO
 * Elasticsearch
 * Qdrant
 * Gemini embeddings
-* Embabel-compatible evidence projection
+* Embabel Agent RAG
+* Apache Tika
 * OpenTelemetry-compatible observability
+
+Embabel Agent RAG is used for hierarchical document ingestion and chunking.
 
 ## Current State
 
-The heavy document intelligence core is implemented.
+The heavy document intelligence and retrieval core is implemented.
 
 ```text
 Ingestion Pipeline              🟩 █████████░ 98%
@@ -222,4 +363,14 @@ Service API                     🟩 █████████░ 98%
 Overall                         🟩 █████████░ 98%
 ```
 
-Remaining work should primarily focus on production hardening, integration validation, failure-path testing, tuning retrieval quality, and removing obsolete or experimental implementations where appropriate.
+Remaining work should primarily focus on:
+
+* production hardening
+* integration validation
+* failure-path testing
+* retrieval quality tuning
+* concurrency and load testing
+* ingestion format coverage
+* observability validation
+* removing obsolete or experimental dependencies
+* validating Agentic Service integration against the simplified evidence boundary
