@@ -15,7 +15,7 @@
         <java.version>25</java.version>
 
         <spring-boot.version>4.0.6</spring-boot.version>
-        <spring-ai.version>2.0.0-M4</spring-ai.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
 
         <grpc.version>1.73.0</grpc.version>
         <protobuf.version>4.31.1</protobuf.version>
@@ -24,6 +24,8 @@
 
         <minio.version>8.5.17</minio.version>
         <tika.version>3.2.0</tika.version>
+        <embabel-agent.version>1.5.0-SNAPSHOT</embabel-agent.version>
+        <dice.version>0.2.0-SNAPSHOT</dice.version>
 
     </properties>
 
@@ -75,12 +77,32 @@
 
     <dependencies>
 
-        <!-- Dice -->
-
+        <!-- Embabel DICE -->
         <dependency>
             <groupId>com.embabel.dice</groupId>
             <artifactId>dice</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <version>${dice.version}</version>
+        </dependency>
+
+        <!-- DICE declares Embabel Agent as provided;
+             document-service supplies the runtime version explicitly. -->
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-api</artifactId>
+            <version>${embabel-agent.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-rag-core</artifactId>
+            <version>${embabel-agent.version}</version>
+        </dependency>
+
+        <!-- Embabel RAG document parsing / hierarchical ingestion -->
+        <dependency>
+            <groupId>com.embabel.agent</groupId>
+            <artifactId>embabel-agent-rag-tika</artifactId>
+            <version>${embabel-agent.version}</version>
         </dependency>
 
         <dependency>
@@ -252,12 +274,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.embabel.agent</groupId>
-            <artifactId>embabel-agent-api</artifactId>
-            <version>0.3.5</version>
-            <scope>compile</scope>
         </dependency>
     </dependencies>
 

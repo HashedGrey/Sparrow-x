@@ -3,20 +3,10 @@ package com.sparrowx.document.ingestion.pipeline;
 import com.sparrowx.document.data.minio.DocumentStorage;
 import com.sparrowx.document.data.postgres.entities.DocumentChunkEntity;
 import com.sparrowx.document.data.postgres.repositories.DocumentChunkRepository;
-import com.sparrowx.document.domain.valueobjects.ContentHash;
-import com.sparrowx.document.domain.valueobjects.DocumentId;
-import com.sparrowx.document.domain.valueobjects.FileName;
-import com.sparrowx.document.domain.valueobjects.IngestionJobId;
-import com.sparrowx.document.domain.valueobjects.MimeType;
-import com.sparrowx.document.domain.valueobjects.ObjectKey;
-import com.sparrowx.document.domain.valueobjects.ProjectId;
-import com.sparrowx.document.domain.valueobjects.TeamId;
-import com.sparrowx.document.domain.valueobjects.TenantId;
+import com.sparrowx.document.domain.valueobjects.*;
 import com.sparrowx.document.exceptions.InvalidDocumentException;
 import com.sparrowx.document.ingestion.chunking.DocumentChunkDraft;
-import com.sparrowx.document.ingestion.chunking.DocumentChunker;
-import com.sparrowx.document.ingestion.extraction.DocumentTextExtractor;
-import com.sparrowx.document.ingestion.extraction.ExtractedDocumentText;
+import com.sparrowx.document.ingestion.embabel.EmbabelRagIngestionAdapter;
 import com.sparrowx.document.ingestion.indexing.DocumentChunkIndexRequest;
 import com.sparrowx.document.ingestion.indexing.DocumentChunkIndexResult;
 import com.sparrowx.document.ingestion.indexing.DocumentChunkIndexer;
@@ -31,21 +21,18 @@ import java.util.Objects;
 public class IngestionPipeline {
 
     private final DocumentStorage documentStorage;
-    private final DocumentTextExtractor documentTextExtractor;
-    private final DocumentChunker documentChunker;
+    private final EmbabelRagIngestionAdapter embabelRagIngestionAdapter;
     private final DocumentChunkRepository documentChunkRepository;
     private final DocumentChunkIndexer documentChunkIndexer;
 
     public IngestionPipeline(
             DocumentStorage documentStorage,
-            DocumentTextExtractor documentTextExtractor,
-            DocumentChunker documentChunker,
+            EmbabelRagIngestionAdapter embabelRagIngestionAdapter,
             DocumentChunkRepository documentChunkRepository,
             DocumentChunkIndexer documentChunkIndexer
     ) {
         this.documentStorage = documentStorage;
-        this.documentTextExtractor = documentTextExtractor;
-        this.documentChunker = documentChunker;
+        this.embabelRagIngestionAdapter = embabelRagIngestionAdapter;
         this.documentChunkRepository = documentChunkRepository;
         this.documentChunkIndexer = documentChunkIndexer;
     }
@@ -55,22 +42,29 @@ public class IngestionPipeline {
 
         List<IngestionPipelineStep> completedSteps = new ArrayList<>();
 
-        byte[] content = documentStorage.read(request.objectKey().value());
+        byte[] content = documentStorage.read(
+                request.objectKey().value()
+        );
         completedSteps.add(IngestionPipelineStep.READ_OBJECT);
 
-        ExtractedDocumentText extractedText = documentTextExtractor.extract(
-                new DocumentTextExtractor.ExtractTextRequest(
+        EmbabelRagIngestionAdapter.EmbabelRagIngestionResult ingestion =
+                embabelRagIngestionAdapter.ingest(
                         request.documentId(),
                         request.objectKey(),
                         request.fileName(),
                         request.mimeType(),
                         content
-                )
-        );
-        completedSteps.add(IngestionPipelineStep.EXTRACT_TEXT);
+                );
 
-        List<DocumentChunkDraft> chunkDrafts = documentChunker.chunk(extractedText);
+        /*
+         * Embabel performs both parsing and chunking inside one adapter
+         * invocation, but retain the existing pipeline lifecycle steps so
+         * callers/metrics do not change.
+         */
+        completedSteps.add(IngestionPipelineStep.EXTRACT_TEXT);
         completedSteps.add(IngestionPipelineStep.CHUNK_TEXT);
+
+        List<DocumentChunkDraft> chunkDrafts = ingestion.chunks();
 
         List<DocumentChunkEntity> chunkEntities = chunkDrafts.stream()
                 .map(chunkDraft -> toEntity(request, chunkDraft))
@@ -79,28 +73,29 @@ public class IngestionPipeline {
         documentChunkRepository.saveAll(chunkEntities);
         completedSteps.add(IngestionPipelineStep.PERSIST_CHUNKS);
 
-        DocumentChunkIndexResult indexResult = documentChunkIndexer.index(
-                new DocumentChunkIndexRequest(
-                        request.ingestionJobId(),
-                        request.tenantId(),
-                        request.projectId(),
-                        request.teamId(),
-                        request.documentId(),
-                        chunkDrafts
-                )
-        );
+        DocumentChunkIndexResult indexResult =
+                documentChunkIndexer.index(
+                        new DocumentChunkIndexRequest(
+                                request.ingestionJobId(),
+                                request.tenantId(),
+                                request.projectId(),
+                                request.teamId(),
+                                request.documentId(),
+                                chunkDrafts
+                        )
+                );
 
         completedSteps.add(IngestionPipelineStep.INDEX_CHUNKS);
         completedSteps.add(IngestionPipelineStep.COMPLETED);
 
-        String text = extractedText.text();
+        String text = ingestion.extractedText();
 
         return new IngestionPipelineResult(
                 request.ingestionJobId(),
                 request.documentId(),
                 text,
-                text == null ? 0 : text.length(),
-                extractedText.pageCount(),
+                text.length(),
+                ingestion.pageCount(),
                 chunkDrafts.size(),
                 indexResult.chunksIndexed(),
                 List.copyOf(completedSteps)
@@ -113,43 +108,52 @@ public class IngestionPipeline {
     ) {
         DocumentChunkEntity entity = new DocumentChunkEntity();
 
-        String chunkText = chunkDraft.text();
-
         entity.setChunkId(chunkDraft.chunkId().value());
         entity.setDocumentId(request.documentId().value());
         entity.setTenantId(request.tenantId().value());
         entity.setProjectId(request.projectId() == null ? null : request.projectId().value());
         entity.setTeamId(request.teamId() == null ? null : request.teamId().value());
-        entity.setText(chunkText);
+        entity.setText(chunkDraft.text());
+        entity.setContentHash(ContentHash.sha256(chunkDraft.text()).value());
         entity.setChunkIndex(chunkDraft.chunkIndex());
         entity.setPageStart(chunkDraft.pageStart());
         entity.setPageEnd(chunkDraft.pageEnd());
-        entity.setTokenCount(estimateTokenCount(chunkText));
-        entity.setContentHash(ContentHash.sha256(chunkText).value());
         entity.setCreatedAt(Instant.now());
 
         return entity;
     }
 
-    private int estimateTokenCount(String text) {
-        if (text == null || text.isBlank()) {
-            return 0;
-        }
-
-        return Math.max(1, text.trim().split("\\s+").length);
-    }
-
     private void validate(IngestionPipelineRequest request) {
         if (request == null) {
-            throw InvalidDocumentException.nullCommand("IngestionPipelineRequest");
+            throw InvalidDocumentException.nullCommand(
+                    "IngestionPipelineRequest"
+            );
         }
 
-        Objects.requireNonNull(request.ingestionJobId(), "ingestionJobId must not be null");
-        Objects.requireNonNull(request.documentId(), "documentId must not be null");
-        Objects.requireNonNull(request.tenantId(), "tenantId must not be null");
-        Objects.requireNonNull(request.objectKey(), "objectKey must not be null");
-        Objects.requireNonNull(request.fileName(), "fileName must not be null");
-        Objects.requireNonNull(request.mimeType(), "mimeType must not be null");
+        Objects.requireNonNull(
+                request.ingestionJobId(),
+                "ingestionJobId must not be null"
+        );
+        Objects.requireNonNull(
+                request.documentId(),
+                "documentId must not be null"
+        );
+        Objects.requireNonNull(
+                request.tenantId(),
+                "tenantId must not be null"
+        );
+        Objects.requireNonNull(
+                request.objectKey(),
+                "objectKey must not be null"
+        );
+        Objects.requireNonNull(
+                request.fileName(),
+                "fileName must not be null"
+        );
+        Objects.requireNonNull(
+                request.mimeType(),
+                "mimeType must not be null"
+        );
     }
 
     public record IngestionPipelineRequest(
