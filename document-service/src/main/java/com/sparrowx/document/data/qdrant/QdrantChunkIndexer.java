@@ -16,9 +16,6 @@ public class QdrantChunkIndexer {
 
     private final QdrantProperties properties;
     private final RestTemplate qdrantRestTemplate;
-    Map<String, Object> payload = new LinkedHashMap<>();
-    Map<String, Object> point = new LinkedHashMap<>();
-    Map<String, Object> body = new LinkedHashMap<>();
 
 
     public QdrantChunkIndexer(
@@ -42,7 +39,13 @@ public class QdrantChunkIndexer {
             int pageEnd,
             Map<String, String> metadata
     ) {
-        validate(tenantId, documentId, chunkId, text, vector);
+        validate(
+                tenantId,
+                documentId,
+                chunkId,
+                text,
+                vector
+        );
 
         if (!properties.enabled()) {
             return;
@@ -54,29 +57,62 @@ public class QdrantChunkIndexer {
                     + properties.collectionName()
                     + "/points?wait=true";
 
+            Map<String, Object> payload =
+                    new LinkedHashMap<>();
+
             payload.put("tenant_id", tenantId.value());
-            payload.put("project_id", projectId == null ? "" : projectId.value());
-            payload.put("team_id", teamId == null ? "" : teamId.value());
+            payload.put(
+                    "project_id",
+                    projectId == null ? "" : projectId.value()
+            );
+            payload.put(
+                    "team_id",
+                    teamId == null ? "" : teamId.value()
+            );
             payload.put("document_id", documentId.value());
             payload.put("chunk_id", chunkId.value());
             payload.put("text", text);
             payload.put("chunk_index", chunkIndex);
             payload.put("page_start", pageStart);
             payload.put("page_end", pageEnd);
-            payload.put("metadata", metadata == null ? Map.<String, String>of() : metadata);
-            payload.put("indexed_at", Instant.now().toString());
+            payload.put(
+                    "metadata",
+                    metadata == null
+                            ? Map.<String, String>of()
+                            : Map.copyOf(metadata)
+            );
+            payload.put(
+                    "indexed_at",
+                    Instant.now().toString()
+            );
 
-            point.put("id", stablePointId(chunkId.value()));
+            Map<String, Object> point =
+                    new LinkedHashMap<>();
+
+            point.put(
+                    "id",
+                    stablePointId(chunkId.value())
+            );
             point.put("vector", vector);
             point.put("payload", payload);
 
-            body.put("points", List.of(point));
+            Map<String, Object> body =
+                    new LinkedHashMap<>();
 
-            qdrantRestTemplate.put(url, body);
+            body.put(
+                    "points",
+                    List.of(point)
+            );
+
+            qdrantRestTemplate.put(
+                    url,
+                    body
+            );
 
         } catch (RuntimeException exception) {
             throw new DocumentIndexingException(
-                    "Failed to index chunk into Qdrant: chunkId=" + chunkId.value(),
+                    "Failed to index chunk into Qdrant: chunkId="
+                            + chunkId.value(),
                     exception
             );
         }
